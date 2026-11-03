@@ -7,7 +7,11 @@ import { LanguageContext } from '../contexts/LanguageContext';
 
 interface ReservationDetailsScreenProps {
   setView: (view: AppView) => void;
-  orderDetails: OrderDetails;
+  orderDetails: Pick<OrderDetails, 'orderNumber' | 'confirmationCode' | 'rentalPeriod' | 'pickupLocation' | 'returnLocation' | 'customer'> & { vehicle: Pick<OrderDetails['vehicle'], 'name'> };
+  embedded?: boolean;
+  afterBookingInfo?: React.ReactNode;
+  beforeBookingInfo?: React.ReactNode;
+  customerInfoFirst?: boolean;
 }
 
 const InfoRow: React.FC<{ label: string; value: string; children?: React.ReactNode }> = ({ label, value, children }) => (
@@ -20,9 +24,17 @@ const InfoRow: React.FC<{ label: string; value: string; children?: React.ReactNo
     </div>
 );
 
-const ReservationDetailsScreen: React.FC<ReservationDetailsScreenProps> = ({ setView, orderDetails }) => {
+const ReservationDetailsScreen: React.FC<ReservationDetailsScreenProps> = ({ setView, orderDetails, embedded = false, afterBookingInfo, beforeBookingInfo, customerInfoFirst = false }) => {
   const { t } = useContext(LanguageContext);
   const [copied, setCopied] = useState(false);
+  const customerInfo = <div className="bg-white p-4 rounded-lg shadow-sm">
+    <h2 className="font-bold text-gray-800 mb-2">{t('customerInfoTitle')}</h2>
+    <div className="space-y-1">
+      <InfoRow label={t('mainDriver')} value={orderDetails.customer.name} />
+      <InfoRow label={t('contactPhone')} value={orderDetails.customer.phone} />
+      {orderDetails.customer.email && <InfoRow label={t('emailLabel')} value={orderDetails.customer.email} />}
+    </div>
+  </div>;
   
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -31,15 +43,17 @@ const ReservationDetailsScreen: React.FC<ReservationDetailsScreenProps> = ({ set
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      <header className="bg-white p-4 flex items-center shadow-sm sticky top-0 z-10">
+    <div className={`flex flex-col bg-gray-50 ${embedded ? '' : 'h-screen'}`}>
+      {!embedded && <header className="bg-white p-4 flex items-center shadow-sm sticky top-0 z-10">
         <button onClick={() => setView(AppView.OVERVIEW)} className="mr-4">
           <ArrowLeft className="text-gray-700" />
         </button>
         <h1 className="text-lg font-bold">{t('reservationDetailsTitle')}</h1>
-      </header>
+      </header>}
 
       <div className="flex-grow overflow-y-auto p-4 space-y-4">
+        {beforeBookingInfo}
+        {customerInfoFirst && customerInfo}
         
         {/* Booking Info */}
         <div className="bg-white p-4 rounded-lg shadow-sm">
@@ -59,17 +73,9 @@ const ReservationDetailsScreen: React.FC<ReservationDetailsScreenProps> = ({ set
             </div>
         </div>
 
-        {/* Customer Info */}
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-            <h2 className="font-bold text-gray-800 mb-2">{t('customerInfoTitle')}</h2>
-            <div className="space-y-1">
-                <InfoRow label={t('mainDriver')} value={orderDetails.customer.name} />
-                <InfoRow label={t('contactPhone')} value={orderDetails.customer.phone} />
-                {orderDetails.customer.email && (
-                    <InfoRow label={t('emailLabel')} value={orderDetails.customer.email} />
-                )}
-            </div>
-        </div>
+        {afterBookingInfo}
+
+        {!customerInfoFirst && customerInfo}
       </div>
     </div>
   );

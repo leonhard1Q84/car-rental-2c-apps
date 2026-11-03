@@ -18,6 +18,8 @@
 4. `specs/epic/selfservice-rental-baseline.md`
 5. `specs/feature/pickup-inspection-security.md`
 6. `specs/feature/return-parking-recommendations.md`：Return Step1 位置失败后的 Yahoo YOLP 门店已批准停车场推荐与复检契约
+7. `specs/feature/取车前准备.md`：客户移动端订单验证、身份资料、证件与合同签署。
+8. `specs/feature/在线验车.md`：门店车辆资料快照、客户确认与失败恢复。
 
 ## 独立仓库
 
@@ -26,6 +28,8 @@
 - 工程拆分契约：`specs/epic/customer-app-extraction.md`。
 - 来源与迁移边界：`docs/architecture/repository-extraction.md`。
 - 客户端默认入口 `/`，兼容 `/selfservice.html`。
+- 当前同步 Codeup `ixtech-app-antigravity` 的 `main@d6e5b1c`；取车准备入口为 `/selfservice.html?flow=pickup-preparation`。
+- 续约保持电话办理；未引入 `codex/rental-extension-connection` 的独立续租应用。
 - 文档描述业务要求，当前代码仍包含 Mock；停车场推荐规格随迁移保留，本次不新增对应实现。
 
 ## 边界

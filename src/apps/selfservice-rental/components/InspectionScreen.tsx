@@ -1,9 +1,9 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AppView,
     InspectionDecisionMode,
     InspectionSubmissionRecord,
-    InspectionVerificationStatus,
+    OrderDetails,
     PhotoFile,
 } from '../types';
 import {
@@ -11,26 +11,33 @@ import {
     ArrowLeft,
     Camera,
     CheckCircle,
+    CheckCircle2,
     Clock3,
+    Lock,
     Loader2,
     Plus,
+    RefreshCw,
     X,
     Unlock,
-    CheckCircle2
 } from 'lucide-react';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { doorControlService } from '../modules/vehicle-control/public-api';
+import type { DoorCommandAction, DoorState } from '../modules/vehicle-control/public-api';
 import { DEFAULT_RENTAL_CAR_IMAGE, getSafeImageSrc } from '../utils/imageFallback';
-import ServiceTermsContent from './ServiceTermsContent';
 import VehiclePhotoGuideModal from './VehiclePhotoGuideModal';
+import PickupDashboardCard from './PickupDashboardCard';
+import { DriverPhotoSection } from '../modules/driver-photos/DriverPhotoSection';
+import { useDriverPhotos } from '../modules/driver-photos/useDriverPhotos';
+import { resolveCustomerVehicleMetricSource } from './customerVehicleMetricSubmission';
 
 interface InspectionScreenProps {
     setView: (view: AppView) => void;
     onInspectionRecordChange: (record: InspectionSubmissionRecord) => void;
     onContinueToContract: (record: InspectionSubmissionRecord) => void;
     initialRecord?: InspectionSubmissionRecord | null;
+    orderDetails: OrderDetails;
 }
 
-const MAX_VERIFICATION_PHOTOS = 2;
 const DEFAULT_BASELINE_DAMAGE_ISSUES = ['paintScratch', 'bodyCracked', 'rimsDamage', 'bodyDent'];
 const MOCK_IMG_FRONT = "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=600&q=80";
 const MOCK_IMG_REAR = "https://images.unsplash.com/photo-1510254256671-6c2ff5287319?w=600&q=80";
@@ -39,6 +46,45 @@ const MOCK_IMG_RIGHT = "https://images.unsplash.com/photo-1552519507-da3b142c6e3
 const MOCK_IMG_INT_FRONT = "https://images.unsplash.com/photo-1596541671569-81acae043fa6?w=600&q=80";
 const MOCK_IMG_INT_REAR = "https://images.unsplash.com/photo-1627056093866-e8d1de81d45c?w=600&q=80";
 const MOCK_IMG_DMG = "https://images.unsplash.com/photo-1574345229555-d368e7ecbe9c?w=600&q=80";
+const DOOR_CONTROL_TIMEOUT_MS = 20_000;
+const DOOR_STATUS_POLL_INTERVAL_MS = 2_000;
+const AUTO_RELOCK_OBSERVATION_MS = 30_000;
+
+type DoorOperationPhase = 'checking' | 'executing' | 'verifying' | 'success' | 'timeout' | 'failed';
+
+interface DoorOperation {
+    action: DoorCommandAction;
+    phase: DoorOperationPhase;
+    requestId: string;
+    deadlineAt: number;
+    alreadyInTargetState?: boolean;
+}
+
+class DoorControlTimeoutError extends Error {
+    constructor() {
+        super('DOOR_CONTROL_TIMEOUT');
+        this.name = 'DoorControlTimeoutError';
+    }
+}
+
+const withDeadline = <T,>(promise: Promise<T>, deadlineAt: number): Promise<T> => {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return Promise.reject(new DoorControlTimeoutError());
+
+    return new Promise<T>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new DoorControlTimeoutError()), remainingMs);
+        promise.then(
+            (value) => {
+                window.clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                window.clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
+};
 
 const buildPhotoFiles = (files: FileList): PhotoFile[] =>
     Array.from(files).map((file: File) => ({
@@ -139,9 +185,9 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
     onInspectionRecordChange,
     onContinueToContract,
     initialRecord = null,
+    orderDetails,
 }) => {
     const { t } = useContext(LanguageContext);
-    const inspectionTermsVersion = 'service_billing_policies_v1';
     const reportExceptionNoteMaxLength = 500;
     const baselineDamageIssueCodes = initialRecord?.baselineSnapshot?.damage.issues?.length
         ? initialRecord.baselineSnapshot.damage.issues
@@ -150,23 +196,43 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
     const baselineInterior = initialRecord?.baselineSnapshot?.interior;
     const baselineDamageImage = initialRecord?.baselineSnapshot?.damage.image;
 
-    const [vehicleStats] = useState({
-        fuel: initialRecord?.vehicleStats.fuel ?? 85,
-        mileage: initialRecord?.vehicleStats.mileage ?? 12450,
-    });
-    const [verificationPhotos, setVerificationPhotos] = useState<PhotoFile[]>(
-        initialRecord ? buildPhotoFilesFromPreviews(initialRecord.verificationPhotos) : [],
-    );
-    const [verificationStatus, setVerificationStatus] = useState<InspectionVerificationStatus>(
-        initialRecord?.verificationStatus || 'idle',
-    );
-    const [verificationReviewReason, setVerificationReviewReason] = useState(initialRecord?.verificationReviewReason || '');
-    const isApplyingParentReviewStateRef = useRef(false);
-    const verifyInputRef = useRef<HTMLInputElement>(null);
+    const vehicleMetricSourceInput = useMemo(() => ({
+        vehicleId: orderDetails.vehicle.licensePlate,
+        mileage: orderDetails.vehicle.odometer,
+        energyPercent: orderDetails.vehicle.fuelLevel,
+        fuelType: orderDetails.vehicle.fuelType,
+        telematicsStatus: orderDetails.vehicle.telematicsStatus,
+        capturedAt: orderDetails.vehicle.telematicsLastReadingAt
+    }), [
+        orderDetails.vehicle.fuelLevel,
+        orderDetails.vehicle.fuelType,
+        orderDetails.vehicle.licensePlate,
+        orderDetails.vehicle.odometer,
+        orderDetails.vehicle.telematicsLastReadingAt,
+        orderDetails.vehicle.telematicsStatus
+    ]);
+    const vehicleMetricSource = resolveCustomerVehicleMetricSource(vehicleMetricSourceInput);
+    const driverPhotoBinding = {
+        orderId: orderDetails.orderNumber,
+        vehicleId: orderDetails.vehicle.licensePlate,
+        snapshot: orderDetails.onlineCheckinDrivers,
+    };
+    const driverPhotos = useDriverPhotos(driverPhotoBinding);
+    const driverPhotoConfirmation = driverPhotos.confirmation;
 
-    const [isExampleModalOpen, setIsExampleModalOpen] = useState(false);
     const [isPhotoGuideModalOpen, setIsPhotoGuideModalOpen] = useState(false);
-    const [isDoorUnlocked, setIsDoorUnlocked] = useState(Boolean(initialRecord));
+    const [doorState, setDoorState] = useState<DoorState>('UNKNOWN');
+    const [doorStatusUpdatedAt, setDoorStatusUpdatedAt] = useState<number | null>(null);
+    const [isDoorStatusLoading, setIsDoorStatusLoading] = useState(true);
+    const [doorStatusError, setDoorStatusError] = useState(false);
+    const [doorOperation, setDoorOperation] = useState<DoorOperation | null>(null);
+    const [doorAlert, setDoorAlert] = useState<'locked_again' | null>(null);
+    const mountedRef = useRef(true);
+    const operationSequenceRef = useRef(0);
+    const operationTokenRef = useRef<string | null>(null);
+    const lastCommandRef = useRef<{ action: DoorCommandAction; at: number } | null>(null);
+    const observationRef = useRef<{ sessionId: string; startedAt: number; lastState: DoorState } | null>(null);
+    const observationTimerRef = useRef<number | null>(null);
 
     // Exception upload state
     const [reportPhotos, setReportPhotos] = useState<PhotoFile[]>(
@@ -174,42 +240,119 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
     );
     const [reportExceptionNote, setReportExceptionNote] = useState(initialRecord?.exceptionNote || '');
 
-    // Action Mode & Terms
+    // Action mode and preserved historical confirmation audit
     const [actionMode, setActionMode] = useState<InspectionDecisionMode>(initialRecord?.decisionMode || 'skip');
-    const [termsAgreedAt, setTermsAgreedAt] = useState<string | null>(initialRecord?.termsAgreedAt || null);
-    const isTermsAgreed = Boolean(termsAgreedAt);
+    const contractConfirmationRecord = initialRecord?.contractConfirmationRecord;
 
-    // New UX: Force view terms
-    const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
-    const [hasViewedTerms, setHasViewedTerms] = useState(Boolean(initialRecord?.termsAgreedAt));
+    const applyDoorStatus = useCallback((status: { state: DoorState; receivedAt: number }) => {
+        if (!mountedRef.current) return;
+        setDoorState(status.state);
+        setDoorStatusUpdatedAt(status.receivedAt);
+        setDoorStatusError(status.state === 'UNKNOWN');
+    }, []);
+
+    const stopRelockObservation = useCallback(() => {
+        observationRef.current = null;
+        if (observationTimerRef.current !== null) {
+            window.clearTimeout(observationTimerRef.current);
+            observationTimerRef.current = null;
+        }
+    }, []);
+
+    const startRelockObservation = useCallback((sessionId: string) => {
+        stopRelockObservation();
+        observationRef.current = {
+            sessionId,
+            startedAt: Date.now(),
+            lastState: 'UNLOCKED',
+        };
+
+        const poll = async () => {
+            const observation = observationRef.current;
+            if (!observation || observation.sessionId !== sessionId || !mountedRef.current) return;
+
+            if (Date.now() - observation.startedAt >= AUTO_RELOCK_OBSERVATION_MS) {
+                stopRelockObservation();
+                return;
+            }
+
+            try {
+                const status = await doorControlService.getDoorStatus();
+                if (!mountedRef.current || observationRef.current?.sessionId !== sessionId) return;
+                applyDoorStatus(status);
+
+                const latestCommand = lastCommandRef.current;
+                const wasUserLock = latestCommand?.action === 'LOCK' && latestCommand.at >= observation.startedAt;
+                if (observation.lastState === 'UNLOCKED' && status.state === 'LOCKED' && !wasUserLock) {
+                    setDoorAlert('locked_again');
+                    stopRelockObservation();
+                    return;
+                }
+
+                observation.lastState = status.state;
+            } catch {
+                // A transient status read failure must not be interpreted as an auto-lock.
+            }
+
+            if (observationRef.current?.sessionId === sessionId && mountedRef.current) {
+                observationTimerRef.current = window.setTimeout(poll, DOOR_STATUS_POLL_INTERVAL_MS);
+            }
+        };
+
+        void poll();
+    }, [applyDoorStatus, stopRelockObservation]);
+
+    const refreshDoorStatus = useCallback(async () => {
+        setIsDoorStatusLoading(true);
+        try {
+            const status = await doorControlService.getDoorStatus();
+            applyDoorStatus(status);
+            return status;
+        } catch {
+            if (mountedRef.current) {
+                setDoorState('UNKNOWN');
+                setDoorStatusError(true);
+            }
+            return null;
+        } finally {
+            if (mountedRef.current) setIsDoorStatusLoading(false);
+        }
+    }, [applyDoorStatus]);
 
     useEffect(() => {
-        // Simulate vehicle unlock logic via telematics API 
-        const unlockTimer = setTimeout(() => {
-            setIsDoorUnlocked(true);
-        }, 1500);
+        mountedRef.current = true;
+        void refreshDoorStatus();
+
+        const handleForeground = () => {
+            if (document.visibilityState === 'visible') void refreshDoorStatus();
+        };
+        document.addEventListener('visibilitychange', handleForeground);
+        window.addEventListener('focus', handleForeground);
 
         return () => {
-            clearTimeout(unlockTimer);
+            mountedRef.current = false;
+            stopRelockObservation();
+            document.removeEventListener('visibilitychange', handleForeground);
+            window.removeEventListener('focus', handleForeground);
         };
-    }, [Boolean(initialRecord)]);
+    }, [refreshDoorStatus, stopRelockObservation]);
 
-    useEffect(() => {
-        if (!initialRecord) return;
-        isApplyingParentReviewStateRef.current = true;
-        setVerificationStatus(initialRecord.verificationStatus || 'idle');
-        setVerificationReviewReason(initialRecord.verificationReviewReason || '');
-    }, [initialRecord?.verificationStatus, initialRecord?.verificationReviewReason]);
-
-    const buildInspectionRecord = (): InspectionSubmissionRecord => {
+    const buildInspectionRecord = (
+        submittedAt = initialRecord?.submittedAt || new Date().toISOString()
+    ): InspectionSubmissionRecord => {
         const normalizedExceptionNote = reportExceptionNote.trim();
 
         return {
-            submittedAt: initialRecord?.submittedAt || new Date().toISOString(),
-            vehicleStats: { mileage: vehicleStats.mileage, fuel: vehicleStats.fuel },
-            verificationStatus,
-            verificationReviewReason: verificationReviewReason || undefined,
-            verificationPhotos: verificationPhotos.map(photo => photo.preview),
+            submittedAt,
+            vehicleStats: {
+                mileage: vehicleMetricSource.mileage,
+                fuel: vehicleMetricSource.energyPercent
+            },
+            vehicleMetricCheckpoint: initialRecord?.vehicleMetricCheckpoint,
+            dashboardPhoto: initialRecord?.dashboardPhoto,
+            verificationStatus: driverPhotos.complete ? 'uploaded' : 'idle',
+            verificationPhotos: driverPhotoConfirmation.drivers.map(driver => driver.photo),
+            driverPhotoConfirmation,
             exteriorPhotos: {
                 front: [MOCK_IMG_FRONT],
                 rear: [MOCK_IMG_REAR],
@@ -224,8 +367,9 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
             decisionMode: actionMode,
             exceptionPhotos: reportPhotos.map(photo => photo.preview),
             exceptionNote: normalizedExceptionNote,
-            termsAgreedAt: termsAgreedAt || undefined,
-            termsVersion: termsAgreedAt ? inspectionTermsVersion : undefined,
+            termsAgreedAt: initialRecord?.termsAgreedAt,
+            termsVersion: initialRecord?.termsVersion,
+            contractConfirmationRecord,
             baselineSnapshot: {
                 exterior: {
                     front: baselineExterior?.front || MOCK_IMG_FRONT,
@@ -248,71 +392,192 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
     useEffect(() => {
         const hasInspectionDraft = Boolean(
             initialRecord ||
-            verificationPhotos.length ||
+            driverPhotoConfirmation.drivers.length ||
             reportPhotos.length ||
             reportExceptionNote.trim() ||
             actionMode === 'report' ||
-            termsAgreedAt,
+            contractConfirmationRecord,
         );
 
         if (!hasInspectionDraft) return;
-        if (isApplyingParentReviewStateRef.current) {
-            isApplyingParentReviewStateRef.current = false;
-            return;
-        }
         onInspectionRecordChange(buildInspectionRecord());
     }, [
         actionMode,
         onInspectionRecordChange,
         reportExceptionNote,
         reportPhotos,
-        termsAgreedAt,
-        verificationPhotos,
-        verificationReviewReason,
-        verificationStatus,
-        vehicleStats.fuel,
-        vehicleStats.mileage,
+        contractConfirmationRecord,
+        driverPhotoConfirmation,
+        driverPhotos.complete,
+        vehicleMetricSource.mileage,
+        vehicleMetricSource.energyPercent,
     ]);
 
-    const handleVerificationPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (verificationStatus === 'pending_review' || verificationStatus === 'approved') return;
-        if (!e.target.files || e.target.files.length === 0) return;
-        const incoming = buildPhotoFiles(e.target.files);
-        const updated = [...verificationPhotos, ...incoming].slice(0, MAX_VERIFICATION_PHOTOS);
-        setVerificationPhotos(updated);
-        setVerificationReviewReason('');
-        setVerificationStatus(updated.length > 0 ? 'pending_review' : 'idle');
-        e.target.value = '';
+    const isDoorOperationPending = Boolean(
+        doorOperation && ['checking', 'executing', 'verifying'].includes(doorOperation.phase),
+    );
+
+    const updateDoorOperationPhase = (requestId: string, phase: DoorOperationPhase) => {
+        if (!mountedRef.current || operationTokenRef.current !== requestId) return;
+        setDoorOperation((current) => current && current.requestId === requestId ? { ...current, phase } : current);
     };
 
-    const handleRemoveVerificationPhoto = (id: string) => {
-        if (verificationStatus === 'pending_review' || verificationStatus === 'approved') return;
-        const updated = verificationPhotos.filter(photo => photo.id !== id);
-        setVerificationPhotos(updated);
+    const executeDoorOperation = useCallback(async (operation: DoorOperation) => {
+        const targetState: DoorState = operation.action === 'UNLOCK' ? 'UNLOCKED' : 'LOCKED';
 
-        if (updated.length === 0) {
-            setVerificationStatus('idle');
-            setVerificationReviewReason('');
-            return;
+        try {
+            const readStatus = async () => {
+                const status = await withDeadline(
+                    doorControlService.getDoorStatus(),
+                    operation.deadlineAt,
+                );
+                applyDoorStatus(status);
+                return status;
+            };
+
+            const initialStatus = await readStatus();
+            if (initialStatus.state === targetState) {
+                setDoorOperation((current) => current && current.requestId === operation.requestId
+                    ? { ...current, phase: 'success', alreadyInTargetState: true }
+                    : current);
+                if (operation.action === 'UNLOCK') {
+                    startRelockObservation(operation.requestId);
+                } else {
+                    stopRelockObservation();
+                }
+                return;
+            }
+            if (initialStatus.state === 'UNKNOWN') {
+                setDoorStatusError(true);
+                throw new Error('DOOR_STATUS_UNKNOWN');
+            }
+
+            updateDoorOperationPhase(operation.requestId, 'executing');
+            const commandResult = await withDeadline(
+                doorControlService.sendDoorCommand(operation.action, operation.requestId),
+                operation.deadlineAt,
+            );
+            if (!commandResult.accepted) throw new Error('DOOR_CONTROL_REJECTED');
+            lastCommandRef.current = { action: operation.action, at: Date.now() };
+            updateDoorOperationPhase(operation.requestId, 'verifying');
+
+            while (Date.now() < operation.deadlineAt) {
+                const status = await readStatus();
+                if (status.state === targetState) {
+                    if (mountedRef.current && operationTokenRef.current === operation.requestId) {
+                        setDoorOperation((current) => current && current.requestId === operation.requestId
+                            ? { ...current, phase: 'success' }
+                            : current);
+                        if (operation.action === 'UNLOCK') {
+                            startRelockObservation(operation.requestId);
+                        } else {
+                            stopRelockObservation();
+                        }
+                    }
+                    return;
+                }
+
+                const remainingMs = operation.deadlineAt - Date.now();
+                if (remainingMs <= 0) break;
+                await withDeadline(
+                    new Promise<void>((resolve) => window.setTimeout(resolve, Math.min(DOOR_STATUS_POLL_INTERVAL_MS, remainingMs))),
+                    operation.deadlineAt,
+                );
+            }
+
+            throw new DoorControlTimeoutError();
+        } catch (error) {
+            if (!mountedRef.current || operationTokenRef.current !== operation.requestId) return;
+            setDoorOperation((current) => current && current.requestId === operation.requestId
+                ? { ...current, phase: error instanceof DoorControlTimeoutError ? 'timeout' : 'failed' }
+                : current);
+            if (!(error instanceof DoorControlTimeoutError)) setDoorStatusError(true);
         }
-    };
+    }, [applyDoorStatus, startRelockObservation, stopRelockObservation]);
 
-    const isVerificationLocked = verificationStatus === 'pending_review' || verificationStatus === 'approved';
-    const isVerificationDone = verificationStatus === 'approved' && verificationPhotos.length > 0;
+    const handleDoorControl = useCallback((action: DoorCommandAction) => {
+        if (isDoorOperationPending) return;
+        stopRelockObservation();
+        setDoorAlert(null);
+
+        operationSequenceRef.current += 1;
+        const requestId = `door-${Date.now()}-${operationSequenceRef.current}`;
+        const operation: DoorOperation = {
+            action,
+            phase: 'checking',
+            requestId,
+            deadlineAt: Date.now() + DOOR_CONTROL_TIMEOUT_MS,
+        };
+        operationTokenRef.current = requestId;
+        setDoorOperation(operation);
+        void executeDoorOperation(operation);
+    }, [executeDoorOperation, isDoorOperationPending, stopRelockObservation]);
+
+    const handleDoorOperationClose = useCallback(() => {
+        if (isDoorOperationPending) return;
+        operationTokenRef.current = null;
+        setDoorOperation(null);
+    }, [isDoorOperationPending]);
+
+    const handleDoorOperationRetry = useCallback(() => {
+        if (!doorOperation || isDoorOperationPending) return;
+        handleDoorControl(doorOperation.action);
+    }, [doorOperation, handleDoorControl, isDoorOperationPending]);
+
+    useEffect(() => {
+        if (!doorOperation || doorOperation.phase !== 'success') return;
+        const timer = window.setTimeout(() => {
+            if (operationTokenRef.current === doorOperation.requestId) {
+                operationTokenRef.current = null;
+                setDoorOperation(null);
+            }
+        }, 900);
+        return () => window.clearTimeout(timer);
+    }, [doorOperation]);
+
+    useEffect(() => {
+        if (!isDoorOperationPending) return;
+        const preventDismiss = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        };
+        window.addEventListener('keydown', preventDismiss);
+        return () => window.removeEventListener('keydown', preventDismiss);
+    }, [isDoorOperationPending]);
+
     const isReportPhotoMissing = actionMode === 'report' && reportPhotos.length === 0;
-
-    const canSubmit = isVerificationDone && isTermsAgreed && !isReportPhotoMissing;
+    const canSubmit = driverPhotos.complete && !isReportPhotoMissing && !isDoorOperationPending;
 
     const handleSubmit = () => {
         if (!canSubmit) return;
-        onContinueToContract(buildInspectionRecord());
+        const submittedAt = new Date().toISOString();
+        onContinueToContract(buildInspectionRecord(submittedAt));
     };
+
+    const handleBack = () => {
+        if (isDoorOperationPending) return;
+        setView(AppView.OVERVIEW);
+    };
+
+    const doorStatusLabel = {
+        LOCKED: t('inspectionDoorStatusLocked'),
+        UNLOCKED: t('inspectionDoorStatusUnlocked'),
+        UNKNOWN: t('inspectionDoorStatusUnknown'),
+    }[doorState];
+
+    const doorStatusTone = {
+        LOCKED: 'border-gray-200 bg-gray-50 text-gray-800',
+        UNLOCKED: 'border-amber-200 bg-amber-50 text-amber-900',
+        UNKNOWN: 'border-gray-200 bg-gray-50 text-gray-600',
+    }[doorState];
 
     return (
         <div className="flex flex-col h-screen bg-gray-50">
             <header className="bg-white p-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center">
-                    <button onClick={() => setView(AppView.OVERVIEW)} className="mr-4">
+                    <button onClick={handleBack} disabled={isDoorOperationPending} className="mr-4 disabled:opacity-40">
                         <ArrowLeft className="text-gray-700" />
                     </button>
                     <h1 className="text-lg font-bold text-gray-900">{t('inspectionTitle')}</h1>
@@ -321,128 +586,76 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
 
             <div className="flex-1 overflow-y-auto p-4 space-y-5 pb-8">
 
-                {/* Telematics Action State */}
-                <div className={`p-4 rounded-xl flex items-center transition-all duration-500 shadow-sm ${isDoorUnlocked ? 'border border-amber-200 bg-amber-50 text-amber-900' : 'bg-primary/10 border border-primary/20 text-primary-dark font-bold'}`}>
-                    {isDoorUnlocked ? <Unlock className="w-6 h-6 mr-3 flex-shrink-0 text-amber-600" /> : <Loader2 className="w-6 h-6 mr-3 animate-spin flex-shrink-0" />}
-                    <div className="text-sm">
-                        {isDoorUnlocked ? (
-                            <>{t('inspectionUnlockSuccess')}</>
-                        ) : (
-                            <>{t('inspectionUnlockPending')}</>
+                <PickupDashboardCard sourceInput={vehicleMetricSourceInput} />
+
+                <DriverPhotoSection binding={driverPhotoBinding} capture={driverPhotos} />
+
+                {/* Vehicle Controls */}
+                <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-bold text-base text-gray-900 border-l-4 border-primary pl-2">
+                            {t('inspectionVehicleControlsTitle')}
+                        </h2>
+                        {isDoorStatusLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" aria-label={t('inspectionDoorStatusChecking')} />}
+                    </div>
+
+                    <div className={`rounded-lg border p-3 ${doorStatusTone}`}>
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t('inspectionDoorStatusLabel')}</span>
+                            <span className="flex items-center gap-2 text-sm font-bold">
+                                {doorState === 'UNLOCKED' ? <Unlock size={16} /> : doorState === 'LOCKED' ? <Lock size={16} /> : <AlertTriangle size={16} />}
+                                {doorStatusLabel}
+                            </span>
+                        </div>
+                        {doorStatusUpdatedAt && (
+                            <p className="mt-1 text-[11px] text-gray-500">
+                                {t('inspectionDoorLastUpdated')}
+                            </p>
                         )}
                     </div>
-                </div>
 
-                {/* Driver Verification */}
-                <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                        <h2 className="font-bold text-base text-gray-900 border-l-4 border-primary pl-2">{t('driverVerificationTitle')}</h2>
+                    {doorStatusError && !isDoorOperationPending && (
+                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                            {t('inspectionDoorStatusUnavailable')}
+                        </p>
+                    )}
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
                         <button
                             type="button"
-                            onClick={() => setIsExampleModalOpen(true)}
-                            className="bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary rounded-full transition hover:bg-primary/20"
+                            onClick={() => handleDoorControl('UNLOCK')}
+                            disabled={isDoorOperationPending}
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {t('viewExample')}
+                            <Unlock size={17} />
+                            {t('inspectionUnlockDoors')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleDoorControl('LOCK')}
+                            disabled={isDoorOperationPending}
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-bold text-gray-800 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Lock size={17} />
+                            {t('inspectionLockDoors')}
                         </button>
                     </div>
 
-                    <p
-                        className="text-sm text-gray-600 mb-2 leading-relaxed mt-2 font-medium"
-                        dangerouslySetInnerHTML={{ __html: t('driverVerificationDesc') }}
-                    />
-                    <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                        {t('driverVerificationTip')}
-                    </p>
-
-                    <div className="flex flex-col mb-2 items-center">
-                        {verificationPhotos.length === 0 ? (
-                            <button
-                                type="button"
-                                onClick={() => verifyInputRef.current?.click()}
-                                className="w-full h-32 border-2 border-dashed border-primary rounded-xl bg-primary/10 flex flex-col items-center justify-center text-primary hover:bg-primary/20 transition-colors"
-                            >
-                                <Camera size={28} className="mb-2" />
-                                <span className="font-bold">{t('takePhoto')}</span>
-                            </button>
-                        ) : (
-                            <div className="flex gap-3 w-full justify-center">
-                                {verificationPhotos.map(photo => (
-                                    <div key={photo.id} className="relative w-32 h-32 flex-shrink-0">
-                                        <img
-                                            src={getSafeImageSrc(photo.preview)}
-                                            alt="verification"
-                                            className="w-full h-full rounded-xl object-cover border border-gray-200 shadow-sm"
-                                            onError={handleImageError}
-                                        />
-                                        {!isVerificationLocked && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveVerificationPhoto(photo.id)}
-                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md"
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-                                {!isVerificationLocked && verificationPhotos.length < MAX_VERIFICATION_PHOTOS && (
-                                    <button
-                                        type="button"
-                                        onClick={() => verifyInputRef.current?.click()}
-                                        className="w-16 h-32 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
-                                    >
-                                        <Camera size={20} />
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                    <div className="mt-4 rounded-lg border border-[#F1D8A6] bg-[#FFF8EC] px-3 py-2.5 text-xs leading-relaxed text-[#8B6420]">
+                        {t('inspectionDoorInstruction')}
                     </div>
 
-                    <input type="file" ref={verifyInputRef} onChange={handleVerificationPhotoSelect} className="hidden" accept="image/*" capture="environment" multiple />
-
-                    {verificationStatus === 'pending_review' && (
-                        <div className="mt-3 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-primary-dark">
-                            <div className="flex items-center text-sm font-semibold">
-                                <Clock3 size={16} className="mr-2" />
-                                {t('verificationPending')}
+                    {doorAlert === 'locked_again' && (
+                        <div className="mt-3 rounded-lg border border-[#F1D8A6] bg-[#FFF8EC] p-3 text-[#8B6420]">
+                            <div className="flex items-start gap-2">
+                                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+                                <div>
+                                    <p className="text-sm font-bold">{t('inspectionDoorLockedAgainTitle')}</p>
+                                    <p className="mt-1 text-xs leading-relaxed">{t('inspectionDoorLockedAgainBody')}</p>
+                                </div>
                             </div>
-                            <p className="mt-1 text-xs leading-relaxed text-primary-dark">
-                                {t('verificationPendingDesc')}
-                            </p>
                         </div>
                     )}
-                    {verificationStatus === 'approved' && (
-                        <div className="mt-3 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-green-800">
-                            <div className="flex items-center text-sm font-semibold">
-                                <CheckCircle size={16} className="mr-2" />
-                                {t('verificationApproved')}
-                            </div>
-                            <p className="mt-1 text-xs leading-relaxed text-green-700">
-                                {t('verificationApprovedDesc')}
-                            </p>
-                        </div>
-                    )}
-                    {verificationStatus === 'rejected' && (
-                        <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-red-800">
-                            <div className="flex items-center text-sm font-semibold">
-                                <AlertTriangle size={16} className="mr-2" />
-                                {t('verificationRejected')}
-                            </div>
-                            <p className="mt-1 text-xs leading-relaxed text-red-700">
-                                {t('verificationRejectedDesc')}
-                            </p>
-                            {verificationReviewReason && (
-                                <p className="mt-2 text-xs leading-relaxed text-red-700">
-                                    <span className="font-semibold">{t('verificationReasonLabel')}:</span>{' '}
-                                    {verificationReviewReason}
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    <p className="text-[11px] text-gray-400 mt-4 bg-gray-50 p-2.5 rounded text-center">
-                        {t('driverVerificationPrivacy')}
-                    </p>
                 </section>
 
                 {/* Read Only Exterior */}
@@ -569,34 +782,6 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
                     </div>
 
                     <div className="mt-6 px-1">
-                        <div className="flex items-start mb-6">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!hasViewedTerms) {
-                                        setIsTermsModalOpen(true);
-                                    } else {
-                                        setTermsAgreedAt(isTermsAgreed ? null : new Date().toISOString());
-                                    }
-                                }}
-                                className={`mt-0.5 border-2 rounded-md w-5 h-5 flex items-center justify-center mr-3 transition-colors flex-shrink-0 ${isTermsAgreed
-                                    ? 'bg-primary border-primary'
-                                    : hasViewedTerms
-                                        ? 'border-[#C9D1E1] hover:border-primary bg-white'
-                                        : 'border-[#F3A21D] bg-[#FFF8EC]'
-                                    }`}
-                            >
-                                {isTermsAgreed && <CheckCircle size={14} className="text-white" />}
-                            </button>
-                            <span className="text-sm font-semibold text-[#1F2436] select-none">
-                                {t('inspectionTermsPrefix')}{' '}
-                                <button type="button" onClick={() => setIsTermsModalOpen(true)} className="text-primary underline underline-offset-2">
-                                    {t('inspectionTermsTitle')}
-                                </button>
-                                .
-                            </span>
-                        </div>
-
                         <button
                             onClick={handleSubmit}
                             disabled={!canSubmit}
@@ -604,76 +789,127 @@ const InspectionScreen: React.FC<InspectionScreenProps> = ({
                         >
                             {t('continueToContract')}
                         </button>
-                        {!canSubmit && verificationPhotos.length > 0 && verificationStatus !== 'approved' && (
+                        {!driverPhotos.complete && (
                             <p className="mt-3 text-center text-xs leading-relaxed text-[#5B6278]">
-                                {t('continueToContractPendingReview')}
+                                {t('driverPhotoRequired')}
                             </p>
                         )}
                     </div>
                 </section>
             </div>
 
-            {/* Example Modal */}
-            {isExampleModalOpen && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setIsExampleModalOpen(false)}>
-                    <div className="bg-white w-full max-w-lg rounded-xl overflow-hidden shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 bg-primary text-white flex justify-between items-center">
-                            <h3 className="font-bold">Driver Verification Example</h3>
-                            <button onClick={() => setIsExampleModalOpen(false)} className="hover:bg-primary-dark p-1 rounded">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="p-5 space-y-4">
-                            <img
-                                src="https://images.unsplash.com/photo-1605810230434-7631ac76ec81?w=900&q=80"
-                                alt="License and plate example"
-                                className="w-full rounded-lg border border-gray-200 object-cover aspect-video"
-                                onError={handleImageError}
-                            />
-                            <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                                Ensure both the vehicle license plate and the details on your physical ID card are legible without glare.
-                            </p>
-                            <button
-                                onClick={() => setIsExampleModalOpen(false)}
-                                className="w-full bg-primary text-white font-bold py-3 rounded-lg hover:bg-primary-dark mt-2"
-                            >
-                                Got it
-                            </button>
-                        </div>
+            {doorOperation && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="door-operation-title"
+                    onClick={(event) => {
+                        if (isDoorOperationPending) event.stopPropagation();
+                    }}
+                >
+                    <div
+                        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        {isDoorOperationPending && (
+                            <>
+                                <div className="flex items-center gap-3">
+                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                    <h3 id="door-operation-title" className="text-lg font-bold text-gray-900">
+                                        {doorOperation.action === 'UNLOCK' ? t('inspectionDoorUnlocking') : t('inspectionDoorLocking')}
+                                    </h3>
+                                </div>
+                                <p className="mt-3 text-sm leading-relaxed text-gray-600">
+                                    {doorOperation.phase === 'checking'
+                                        ? t('inspectionDoorChecking')
+                                        : doorOperation.phase === 'verifying'
+                                            ? t('inspectionDoorVerifying')
+                                            : t('inspectionDoorWaiting')}
+                                </p>
+                            </>
+                        )}
+
+                        {doorOperation.phase === 'success' && (
+                            <div className="flex items-start gap-3">
+                                <CheckCircle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-600" />
+                                <div>
+                                    <h3 id="door-operation-title" className="text-lg font-bold text-gray-900">
+                                        {doorOperation.action === 'UNLOCK'
+                                            ? doorOperation.alreadyInTargetState ? t('inspectionDoorAlreadyUnlocked') : t('inspectionDoorUnlocked')
+                                            : doorOperation.alreadyInTargetState ? t('inspectionDoorAlreadyLocked') : t('inspectionDoorLocked')}
+                                    </h3>
+                                    <p className="mt-2 text-sm leading-relaxed text-gray-600">
+                                        {doorOperation.action === 'UNLOCK' ? t('inspectionUnlockSuccess') : t('inspectionDoorLockSuccess')}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {doorOperation.phase === 'timeout' && (
+                            <>
+                                <div className="flex items-start gap-3">
+                                    <Clock3 className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-600" />
+                                    <div>
+                                        <h3 id="door-operation-title" className="text-lg font-bold text-gray-900">{t('inspectionDoorTimeoutTitle')}</h3>
+                                        <p className="mt-2 text-sm leading-relaxed text-gray-600">{t('inspectionDoorTimeoutBody')}</p>
+                                    </div>
+                                </div>
+                                <div className="mt-5 grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleDoorOperationRetry}
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark"
+                                    >
+                                        <RefreshCw size={16} />
+                                        {t('inspectionDoorRetry')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleDoorOperationClose}
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-bold text-gray-800 transition hover:bg-gray-50"
+                                    >
+                                        <X size={16} />
+                                        {t('inspectionDoorClose')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {doorOperation.phase === 'failed' && (
+                            <>
+                                <div className="flex items-start gap-3">
+                                    <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-red-600" />
+                                    <div>
+                                        <h3 id="door-operation-title" className="text-lg font-bold text-gray-900">{t('inspectionDoorFailureTitle')}</h3>
+                                        <p className="mt-2 text-sm leading-relaxed text-gray-600">{t('inspectionDoorFailureBody')}</p>
+                                    </div>
+                                </div>
+                                <div className="mt-5 grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleDoorOperationRetry}
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark"
+                                    >
+                                        <RefreshCw size={16} />
+                                        {t('inspectionDoorRetry')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleDoorOperationClose}
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-bold text-gray-800 transition hover:bg-gray-50"
+                                    >
+                                        <X size={16} />
+                                        {t('inspectionDoorClose')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
 
             <VehiclePhotoGuideModal isOpen={isPhotoGuideModalOpen} onClose={() => setIsPhotoGuideModalOpen(false)} />
-
-            {/* Terms Enforcement Modal */}
-            {isTermsModalOpen && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setIsTermsModalOpen(false)}>
-                    <div className="bg-white w-full max-w-lg rounded-xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 bg-primary text-white flex justify-between items-center flex-shrink-0">
-                            <h3 className="font-bold">{t('inspectionTermsTitle')}</h3>
-                            <button onClick={() => setIsTermsModalOpen(false)} className="hover:bg-primary-dark p-1 rounded">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="p-5 overflow-y-auto flex-1">
-                            <ServiceTermsContent className="text-sm text-gray-700 leading-relaxed" />
-                        </div>
-                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                            <button
-                                onClick={() => {
-                                    setHasViewedTerms(true);
-                                    setTermsAgreedAt(prev => prev || new Date().toISOString());
-                                    setIsTermsModalOpen(false);
-                                }}
-                                className="w-full bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-dark shadow-sm transition active:scale-[0.98]"
-                            >
-                                {t('inspectionTermsAgree')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

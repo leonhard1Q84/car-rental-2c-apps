@@ -13,23 +13,181 @@ import ReturnScreen from './components/ReturnScreen';
 import TripEndedScreen from './components/TripEndedScreen';
 import ReturnDetailsScreen from './components/ReturnDetailsScreen';
 import ServiceTermsScreen from './components/ServiceTermsScreen';
-import { AppView, OrderDetails, CanonicalStatus, OnlineCheckinVerificationStatus, InspectionSubmissionRecord } from './types';
+import OnlineCheckinScreen from './components/OnlineCheckinScreen';
+import { AppView, OrderDetails, CanonicalStatus, CustomerReturnSubmission, OnlineCheckinVerificationStatus, InspectionSubmissionRecord } from './types';
 import { LanguageProvider, LanguageContext } from './contexts/LanguageContext';
 import { XCircle, AlertTriangle, Phone } from 'lucide-react';
 import { DEFAULT_RENTAL_CAR_IMAGE } from './utils/imageFallback';
 import { MOCK_ACCOUNTS } from './mockAccounts';
+import {
+  createVehicleMetricCheckpoint,
+  RENTAL_GUIDELINES_CONFIRMATION_ITEM_ID,
+  RENTAL_TERMS_CONFIRMATION_ITEM_ID,
+  resolveVehicleMetricSource,
+  type PickupContractConfigSnapshot
+} from '@shared/contracts';
+import { isInspectionReadyForContract } from './components/inspectionContractEntry';
 
 const MOCK_CONTRACT_PDF_URL = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
-const MOCK_INSPECTION_REVIEW_DELAY_MS = 2600;
-const MOCK_INSPECTION_REJECTION_REASON =
-  'The driver license details are not clear enough to verify. Please retake the photo with the full license and plate clearly visible.';
+const MOCK_RENTAL_GUIDELINES_IMAGE_URL = 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200&q=85';
+export const MOCK_PICKUP_CONTRACT_CONFIG_SNAPSHOT: PickupContractConfigSnapshot = {
+  schemaVersion: 2,
+  revision: 'selfservice-pickup-contract-r8',
+  publishedAt: '2025-10-20T08:00:00+09:00',
+  defaultLocale: 'en',
+  vendorId: 'jdm-car-rental',
+  storeId: 'tokyo-ginza',
+  rentalContract: {
+    attachments: [
+      {
+        id: 'selfservice-r8-rental-terms',
+        title: 'Japan Rental Terms and Conditions',
+        originalFileName: 'JDM_Rental_Terms_2026.pdf',
+        displayOrder: 1,
+        url: MOCK_CONTRACT_PDF_URL,
+        mimeType: 'application/pdf',
+        uploadStatus: 'UPLOADED'
+      }
+    ]
+  },
+  rentalGuidelines: {
+    attachments: [
+      {
+        id: 'selfservice-r8-driving-safety-notes',
+        title: 'Japan Driving Safety Notes',
+        originalFileName: 'Japan_Driving_Safety_Notes.jpg',
+        displayOrder: 1,
+        url: MOCK_RENTAL_GUIDELINES_IMAGE_URL,
+        mimeType: 'image/jpeg',
+        uploadStatus: 'UPLOADED'
+      }
+    ]
+  },
+  customerConfirmationItems: [
+    {
+      id: RENTAL_TERMS_CONFIRMATION_ITEM_ID,
+      materialGroup: 'RENTAL_CONTRACT',
+      order: 10,
+      title: {
+        'zh-CN': '我已阅读并同意租车条款',
+        'zh-TW': '我已閱讀並同意租車條款',
+        en: 'I have read and agree to the rental terms.',
+        ja: 'レンタル条項を読み、同意します。',
+        ko: '대여 약관을 읽었으며 이에 동의합니다.',
+        th: 'ฉันได้อ่านและยอมรับข้อกำหนดการเช่าแล้ว'
+      }
+    },
+    {
+      id: RENTAL_GUIDELINES_CONFIRMATION_ITEM_ID,
+      materialGroup: 'RENTAL_GUIDELINES',
+      order: 20,
+      title: {
+        'zh-CN': '我已阅读并知悉租车注意事项',
+        'zh-TW': '我已閱讀並知悉租車注意事項',
+        en: 'I have read and acknowledged the rental notes.',
+        ja: 'レンタル時の注意事項を読み、確認しました。',
+        ko: '대여 유의사항을 읽고 확인했습니다.',
+        th: 'ฉันได้อ่านและรับทราบข้อควรทราบในการเช่าแล้ว'
+      }
+    }
+  ]
+};
+
+const createApprovedInspectionRecord = (orderId: string): InspectionSubmissionRecord => ({
+  submittedAt: '2025-10-28T09:30:00+09:00',
+  vehicleStats: {
+    mileage: 12450,
+    fuel: 85,
+  },
+  verificationStatus: 'approved',
+  verificationPhotos: [DEFAULT_RENTAL_CAR_IMAGE],
+  exteriorPhotos: {
+    front: [],
+    rear: [],
+    left: [],
+    right: [],
+  },
+  lightPhotos: {
+    front: [],
+    rear: [],
+  },
+  damageDescription: '',
+  decisionMode: 'skip',
+  termsAgreedAt: '2025-10-28T09:35:00+09:00',
+  termsVersion: 'v1.0',
+  contractConfirmationRecord: {
+    configRevision: MOCK_PICKUP_CONTRACT_CONFIG_SNAPSHOT.revision,
+    configPublishedAt: MOCK_PICKUP_CONTRACT_CONFIG_SNAPSHOT.publishedAt,
+    confirmations: [
+      {
+        itemId: RENTAL_TERMS_CONFIRMATION_ITEM_ID,
+        materialGroup: 'RENTAL_CONTRACT',
+        confirmationText: 'I have read and agree to the rental terms.',
+        attachmentIds: ['selfservice-r8-rental-terms'],
+        locale: 'en',
+        confirmedAt: '2025-10-28T09:34:00+09:00'
+      },
+      {
+        itemId: RENTAL_GUIDELINES_CONFIRMATION_ITEM_ID,
+        materialGroup: 'RENTAL_GUIDELINES',
+        confirmationText: 'I have read and acknowledged the rental notes.',
+        attachmentIds: ['selfservice-r8-driving-safety-notes'],
+        locale: 'en',
+        confirmedAt: '2025-10-28T09:35:00+09:00'
+      }
+    ]
+  },
+  dashboardPhoto: DEFAULT_RENTAL_CAR_IMAGE,
+  vehicleMetricCheckpoint: createVehicleMetricCheckpoint({
+    checkpointType: 'SELF_SERVICE_CUSTOMER_PICKUP',
+    orderId,
+    vehicleId: 'B C5580',
+    source: resolveVehicleMetricSource({
+      hasTelematics: true,
+      telematicsStatus: 'INSTALLED_ONLINE',
+      mileage: 12450,
+      fuelLevel: 85,
+      fuelType: 'Gasoline',
+      deviceId: 'device-demo-approved',
+      capturedAt: new Date().toISOString()
+    }),
+    mileage: 12450,
+    energyPercent: 85,
+    decision: 'CONFIRMED',
+    actorId: `customer-${orderId}`,
+    actorRole: 'CUSTOMER'
+  })
+});
 
 const mockOrderDetails: OrderDetails = {
+  onlineCheckinDrivers: MOCK_ACCOUNTS.DEMO.onlineCheckinDrivers,
   orderNumber: 'ORD-2025-1026-001',
   confirmationCode: 'WMQ677027',
   canonical_status: CanonicalStatus.CONFIRMED,
   online_checkin_verification_status: OnlineCheckinVerificationStatus.APPROVED,
   contract_sign_status: 'UNSIGNED',
+  addons: {
+    online_booking: [
+      {
+        code: 'BABY_SEAT',
+        name: 'Baby seat',
+        quantity: 1,
+        unitPrice: 1650,
+        subtotal: 1650,
+        currency: 'JPY'
+      }
+    ],
+    store_addons: [
+      {
+        code: 'CDW',
+        name: 'Collision Damage Waiver',
+        quantity: 1,
+        unitPrice: 1000,
+        subtotal: 1000,
+        currency: 'JPY'
+      }
+    ]
+  },
   rentalPeriod: {
     // Use ISO format for better cross-browser compatibility
     start: '2025-10-28T10:00:00',
@@ -44,22 +202,31 @@ const mockOrderDetails: OrderDetails = {
     state: 'Tokyo',
     color: 'WHITE',
     fuelLevel: 85,
+    fuelType: 'Gasoline',
     range: 420,
     odometer: 12450,
     parkingSpot: 'A-23',
     isLocked: true,
+    telematicsStatus: 'INSTALLED_ONLINE',
+    telematicsLastReadingAt: new Date().toISOString(),
     coordinates: {
       lat: 35.6895,
       lng: 139.6917 // Example: Tokyo
     }
   },
-  pickupLocation: 'Tokyo Ginza Imperial Hotel Parking Lot',
+  pickupLocation: 'Tokyo Ginza Imperial Hotel, 1-1-1 Uchisaiwaicho, Chiyoda City, Tokyo',
   pickupLocationDetails: {
     name: 'Tokyo Ginza Imperial Hotel Parking Lot',
+    address: '1-1-1 Uchisaiwaicho, Chiyoda City, Tokyo',
     phone: '+8688888888'
   },
   pickupInstructions: 'Walk 30km left from XXX Road and turn right.',
-  returnLocation: 'Tokyo Ginza Imperial Hotel Parking Lot',
+  returnLocation: 'Tokyo Ginza Imperial Hotel, 1-1-1 Uchisaiwaicho, Chiyoda City, Tokyo',
+  returnParkingPlan: {
+    status: 'ACTIVE',
+    parkingName: 'Imperial Hotel Parking',
+    address: '1-1-1 Uchisaiwaicho, Chiyoda City, Tokyo 100-8558',
+  },
   returnCoordinates: {
     lat: 35.6895,
     lng: 139.6917
@@ -76,7 +243,7 @@ const mockOrderDetails: OrderDetails = {
   contract: {
     number: 'CO-2025-1026-001',
     date: '2025-10-26',
-    attachment_status: 'GENERATING',
+    attachment_status: 'NOT_READY',
   },
   deposit: {
     amount: 1000, // Updated to match screenshot example
@@ -90,17 +257,7 @@ const mockOrderDetails: OrderDetails = {
   isDepositPaid: false, // Initially false
   isRentalActive: false, // Initially false
   isReturned: false, // Initially false
-};
-
-const isInspectionReadyForContract = (record: InspectionSubmissionRecord | null): boolean => {
-  if (!record) return false;
-  if (record.verificationStatus !== 'approved') return false;
-  if (record.verificationPhotos.length === 0) return false;
-  if (!record.termsAgreedAt) return false;
-  if (record.decisionMode === 'report' && (!record.exceptionPhotos || record.exceptionPhotos.length === 0)) {
-    return false;
-  }
-  return true;
+  pickupContractConfigSnapshot: MOCK_PICKUP_CONTRACT_CONFIG_SNAPSHOT,
 };
 
 const App: React.FC = () => {
@@ -108,8 +265,12 @@ const App: React.FC = () => {
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [inspectionRecord, setInspectionRecord] = useState<InspectionSubmissionRecord | null>(null);
   const [depositVisitCount, setDepositVisitCount] = useState(0);
-  const inspectionReviewAttemptRef = useRef(0);
-  const inspectionCompleted = isInspectionReadyForContract(inspectionRecord);
+  const [blockedOnlineCheckinStatus, setBlockedOnlineCheckinStatus] = useState<OnlineCheckinVerificationStatus | null>(null);
+  const [onlineCheckinOrderNo, setOnlineCheckinOrderNo] = useState<string | null>(null);
+  const [submittedOnlineCheckinOrders, setSubmittedOnlineCheckinOrders] = useState<Set<string>>(() => new Set());
+  // 记录正在发起签约的订单号，避免同一订单重复触发合同签署流程。
+  const contractSigningOrderRef = useRef<string | null>(null);
+  const inspectionCompleted = isInspectionReadyForContract(inspectionRecord, orderDetails || undefined);
 
   useEffect(() => {
     // Simulate fetching order details after successful authentication
@@ -158,6 +319,8 @@ const App: React.FC = () => {
             attachment_status: 'READY',
             attachment_url: MOCK_CONTRACT_PDF_URL,
           },
+          // The rental becomes active only after the signed contract artifact is ready.
+          isRentalActive: true,
         };
       });
     }, 4000);
@@ -165,31 +328,7 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [orderDetails?.contract_sign_status, orderDetails?.contract.attachment_status]);
 
-  useEffect(() => {
-    if (!inspectionRecord || inspectionRecord.verificationStatus !== 'pending_review') {
-      return;
-    }
 
-    inspectionReviewAttemptRef.current += 1;
-    const reviewAttempt = inspectionReviewAttemptRef.current;
-
-    const timer = setTimeout(() => {
-      setInspectionRecord(prev => {
-        if (!prev || prev.verificationStatus !== 'pending_review') {
-          return prev;
-        }
-
-        const isRejected = reviewAttempt === 1;
-        return {
-          ...prev,
-          verificationStatus: isRejected ? 'rejected' : 'approved',
-          verificationReviewReason: isRejected ? MOCK_INSPECTION_REJECTION_REASON : undefined,
-        };
-      });
-    }, MOCK_INSPECTION_REVIEW_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [inspectionRecord?.verificationStatus]);
 
   // Wrapper for setView to track deposit screen visits
   const handleSetView = useCallback((view: AppView) => {
@@ -202,23 +341,34 @@ const App: React.FC = () => {
   // ─── Auth Success with Status Gate ──────────────────────────────────────────
   // Rules:
   // 1) CANCELLED order -> blocked
-  // 2) Online Check-In not approved -> redirect user back to Online Check-In app
+  // 2) Online Check-In not submitted -> open the local submission demo; review states stay blocked
   // 3) Not self-service eligible -> blocked for regular rental orders
-  // 4) Approved + eligible -> enter overview
+  // 4) Approved + eligible -> enter the account's configured demo entry point
   const handleAuthSuccess = (orderNo: string) => {
     const normalizedOrderNo = orderNo.toUpperCase();
     const account = MOCK_ACCOUNTS[normalizedOrderNo];
     if (!account) return; // 不应发生，AuthScreen 已做校验
+    const onlineCheckinStatus = submittedOnlineCheckinOrders.has(normalizedOrderNo)
+      ? OnlineCheckinVerificationStatus.PENDING_REVIEW
+      : account.online_checkin_verification_status;
 
     setOrderDetails(null);
     setInspectionRecord(null);
-    inspectionReviewAttemptRef.current = 0;
+    setBlockedOnlineCheckinStatus(null);
+    setOnlineCheckinOrderNo(null);
+    contractSigningOrderRef.current = null;
 
     if (account.canonical_status === CanonicalStatus.CANCELLED) {
       setCurrentView(AppView.AUTH_BLOCKED_CANCELLED);
       return;
     }
-    if (account.online_checkin_verification_status !== OnlineCheckinVerificationStatus.APPROVED) {
+    if (onlineCheckinStatus !== OnlineCheckinVerificationStatus.APPROVED) {
+      if (onlineCheckinStatus === OnlineCheckinVerificationStatus.NOT_SUBMITTED) {
+        setOnlineCheckinOrderNo(normalizedOrderNo);
+        setCurrentView(AppView.ONLINE_CHECKIN);
+        return;
+      }
+      setBlockedOnlineCheckinStatus(onlineCheckinStatus);
       setCurrentView(AppView.AUTH_BLOCKED_ONLINE_CHECKIN_REQUIRED);
       return;
     }
@@ -228,18 +378,52 @@ const App: React.FC = () => {
       return;
     }
 
+    const isInspectionReadyAccount = account.demo_stage === 'INSPECTION_READY';
+    const isContractReadyAccount = account.demo_stage === 'CONTRACT_READY';
+    const isRentalActiveAccount = account.demo_stage === 'RETURN_READY' || account.canonical_status === CanonicalStatus.PICKED_UP;
+    const hasCompletedInspection = isContractReadyAccount || isRentalActiveAccount;
+    const hasAuthorizedDeposit = isInspectionReadyAccount || hasCompletedInspection;
+    if (hasCompletedInspection) {
+      setInspectionRecord(createApprovedInspectionRecord(normalizedOrderNo));
+    }
+
     setOrderDetails({
       ...mockOrderDetails,
       orderNumber: normalizedOrderNo,
+      onlineCheckinDrivers: account.onlineCheckinDrivers,
       confirmationCode: normalizedOrderNo,
       canonical_status: account.canonical_status,
-      online_checkin_verification_status: account.online_checkin_verification_status,
+      online_checkin_verification_status: onlineCheckinStatus,
       is_selfservice_eligible: account.is_selfservice_eligible,
-      isIdentityVerified: account.online_checkin_verification_status === OnlineCheckinVerificationStatus.APPROVED,
+      isIdentityVerified: onlineCheckinStatus === OnlineCheckinVerificationStatus.APPROVED,
+      preparationStatus: hasAuthorizedDeposit ? 'Ready' : mockOrderDetails.preparationStatus,
+      pickupStatus: isRentalActiveAccount
+        ? 'Picked Up'
+        : isContractReadyAccount
+          ? 'Inspection Complete'
+          : isInspectionReadyAccount
+            ? 'Ready for Inspection'
+            : mockOrderDetails.pickupStatus,
+      deposit: hasAuthorizedDeposit
+        ? { ...mockOrderDetails.deposit, status: 3 }
+        : mockOrderDetails.deposit,
+      isDepositPaid: hasAuthorizedDeposit,
+      contract_sign_status: isRentalActiveAccount ? 'SIGNED' : mockOrderDetails.contract_sign_status,
+      contract: isRentalActiveAccount
+        ? {
+            ...mockOrderDetails.contract,
+            number: 'CO-RETURN01',
+            date: '2025-10-28',
+            attachment_status: 'READY',
+            attachment_url: MOCK_CONTRACT_PDF_URL,
+          }
+        : mockOrderDetails.contract,
+      isRentalActive: isRentalActiveAccount,
+      isReturned: false,
     });
 
-    // APPROVED → 正常进入 Overview
-    handleSetView(AppView.OVERVIEW);
+    // Contract-ready demo skips navigation only; all formal contract admission facts remain populated.
+    handleSetView(isContractReadyAccount ? AppView.CONTRACT : AppView.OVERVIEW);
   };
 
   const handleDepositComplete = () => {
@@ -256,61 +440,172 @@ const App: React.FC = () => {
   }, []);
 
   const handleContinueToContract = useCallback((record: InspectionSubmissionRecord) => {
-    if (!isInspectionReadyForContract(record)) {
+    if (!orderDetails || !record.driverPhotoConfirmation || !isInspectionReadyForContract(record, orderDetails)) {
       setInspectionRecord(record);
       return;
     }
+    const pickupCompletedAt = new Date().toISOString();
     setInspectionRecord(record);
+    setOrderDetails((previous) => {
+      if (!previous) return previous;
+      if (previous.pickup_completed_at) return previous;
+      return {
+        ...previous,
+        canonical_status: CanonicalStatus.PICKED_UP,
+        pickup_completed_at: pickupCompletedAt,
+        pickup_addons_snapshot: previous.pickup_addons_snapshot ?? {
+          online_booking: previous.addons.online_booking.map((item) => ({ ...item })),
+          store_addons: previous.addons.store_addons.map((item) => ({ ...item })),
+          frozen_at: pickupCompletedAt
+        },
+        contract_sign_status: 'UNSIGNED',
+        contract_signed_at: undefined,
+        contract: {
+          ...previous.contract,
+          attachment_status: 'NOT_READY',
+          attachment_url: undefined
+        }
+      };
+    });
     handleSetView(AppView.CONTRACT);
-  }, [handleSetView]);
+  }, [handleSetView, orderDetails]);
 
   const handleContractSign = () => {
-    setOrderDetails(prev => prev ? ({
-      ...prev,
-      contract_sign_status: 'SIGNED',
-      canonical_status: CanonicalStatus.PICKED_UP,
-      contract: {
-        ...prev.contract,
-        attachment_status: 'GENERATING',
-        attachment_url: undefined,
-      },
-    }) : prev);
+    if (!orderDetails || orderDetails.canonical_status !== CanonicalStatus.PICKED_UP || !orderDetails.pickup_completed_at || !orderDetails.pickup_addons_snapshot) {
+      return false;
+    }
+    if (
+      orderDetails.contract_sign_status === 'SIGNED' ||
+      orderDetails.contract_sign_status === 'SIGNING' ||
+      contractSigningOrderRef.current === orderDetails.orderNumber
+    ) {
+      return false;
+    }
+
+    contractSigningOrderRef.current = orderDetails.orderNumber;
+    const signedAt = new Date().toISOString();
+    setOrderDetails(prev => {
+      if (
+        !prev ||
+        prev.canonical_status !== CanonicalStatus.PICKED_UP ||
+        !prev.pickup_completed_at ||
+        !prev.pickup_addons_snapshot ||
+        prev.contract_sign_status === 'SIGNED' ||
+        prev.contract_sign_status === 'SIGNING'
+      ) {
+        contractSigningOrderRef.current = null;
+        return prev;
+      }
+      return {
+        ...prev,
+        contract_sign_status: 'SIGNED',
+        contract_signed_at: signedAt,
+        isRentalActive: false,
+        contract: {
+          ...prev.contract,
+          attachment_status: 'GENERATING',
+          attachment_url: undefined,
+        },
+      };
+    });
     handleSetView(AppView.COMPLETION);
+    return true;
   }
+
+  const handleRetryContractGeneration = useCallback(() => {
+    setOrderDetails((previous) => {
+      if (
+        !previous ||
+        previous.canonical_status !== CanonicalStatus.PICKED_UP ||
+        previous.contract_sign_status !== 'SIGNED' ||
+        previous.contract.attachment_status !== 'FAILED'
+      ) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        isRentalActive: false,
+        contract: {
+          ...previous.contract,
+          attachment_status: 'GENERATING',
+          attachment_url: undefined
+        }
+      };
+    });
+  }, []);
 
   const handleStartRental = () => {
-    if (orderDetails) {
-      setOrderDetails({ ...orderDetails, isRentalActive: true });
-      handleSetView(AppView.OVERVIEW);
-    }
+    handleSetView(AppView.OVERVIEW);
   }
 
-  const handleReturnComplete = () => {
+  const handleReturnComplete = (submission: CustomerReturnSubmission) => {
     if (orderDetails) {
       setOrderDetails({
         ...orderDetails,
         isRentalActive: false,
-        isReturned: true
+        isReturned: true,
+        returnVehicleMetricCheckpoint: submission.vehicleMetricCheckpoint,
+        returnDashboardPhoto: submission.dashboardPhoto,
+        returnConditionReport: submission.conditionReport
       });
       handleSetView(AppView.TRIP_ENDED);
     }
   }
+
+  const handleOnlineCheckinSubmitted = () => {
+    if (onlineCheckinOrderNo) {
+      setSubmittedOnlineCheckinOrders((previous) => {
+        const next = new Set(previous);
+        next.add(onlineCheckinOrderNo);
+        return next;
+      });
+    }
+    setOnlineCheckinOrderNo(null);
+    setBlockedOnlineCheckinStatus(OnlineCheckinVerificationStatus.PENDING_REVIEW);
+    setCurrentView(AppView.AUTH_BLOCKED_ONLINE_CHECKIN_REQUIRED);
+  };
 
   const renderContent = () => {
     switch (currentView) {
       case AppView.AUTH:
         return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
 
+      case AppView.ONLINE_CHECKIN:
+        return onlineCheckinOrderNo ? (
+          <OnlineCheckinScreen
+            orderNo={onlineCheckinOrderNo}
+            onBack={() => {
+              setOnlineCheckinOrderNo(null);
+              setCurrentView(AppView.AUTH);
+            }}
+            onSubmitted={handleOnlineCheckinSubmitted}
+          />
+        ) : <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+
       // ─── Status Gate Views ─────────────────────────────────────────────────
       case AppView.AUTH_BLOCKED_CANCELLED:
         return <AuthBlockedView type="cancelled" onBack={() => setCurrentView(AppView.AUTH)} />;
       case AppView.AUTH_BLOCKED_ONLINE_CHECKIN_REQUIRED:
-        return <AuthBlockedView type="online_checkin_required" onBack={() => setCurrentView(AppView.AUTH)} />;
+        return (
+          <AuthBlockedView
+            type="online_checkin_required"
+            onlineCheckinStatus={blockedOnlineCheckinStatus}
+            onBack={() => setCurrentView(AppView.AUTH)}
+          />
+        );
       case AppView.AUTH_BLOCKED_NOT_ELIGIBLE:
         return <AuthBlockedView type="not_eligible" onBack={() => setCurrentView(AppView.AUTH)} />;
 
       case AppView.OVERVIEW:
-        return orderDetails && <OverviewScreen orderDetails={orderDetails} setView={handleSetView} inspectionCompleted={inspectionCompleted} />;
+        return orderDetails && (
+          <OverviewScreen
+            orderDetails={orderDetails}
+            setView={handleSetView}
+            inspectionCompleted={inspectionCompleted}
+            onRetryContractGeneration={handleRetryContractGeneration}
+          />
+        );
       case AppView.DEPOSIT:
         return orderDetails && <DepositScreen
           orderDetails={orderDetails}
@@ -320,14 +615,15 @@ const App: React.FC = () => {
           simulateTimePassed={depositVisitCount > 1}
         />;
       case AppView.INSPECTION:
-        return (
+        return orderDetails ? (
           <InspectionScreen
+            orderDetails={orderDetails}
             setView={handleSetView}
             onInspectionRecordChange={handleInspectionRecordChange}
             onContinueToContract={handleContinueToContract}
             initialRecord={inspectionRecord}
           />
-        );
+        ) : null;
       case AppView.INSPECTION_DETAILS:
         return <InspectionDetailsScreen setView={handleSetView} record={inspectionRecord} />;
       case AppView.CONTRACT:
@@ -335,7 +631,14 @@ const App: React.FC = () => {
       case AppView.RESERVATION_DETAILS:
         return orderDetails && <ReservationDetailsScreen orderDetails={orderDetails} setView={handleSetView} />;
       case AppView.COMPLETION:
-        return orderDetails && <CompletionScreen orderDetails={orderDetails} setView={handleSetView} onStartRental={handleStartRental} />;
+        return orderDetails && (
+          <CompletionScreen
+            orderDetails={orderDetails}
+            setView={handleSetView}
+            onStartRental={handleStartRental}
+            onRetryContractGeneration={handleRetryContractGeneration}
+          />
+        );
       case AppView.VEHICLE_STATUS:
         return orderDetails && <VehicleStatusScreen orderDetails={orderDetails} setView={handleSetView} />;
       case AppView.RETURN:
@@ -366,9 +669,40 @@ const App: React.FC = () => {
 // Inline gate views for blocked auth outcomes.
 const AuthBlockedView: React.FC<{
   type: 'cancelled' | 'online_checkin_required' | 'not_eligible';
+  onlineCheckinStatus?: OnlineCheckinVerificationStatus | null;
   onBack: () => void;
-}> = ({ type, onBack }) => {
+}> = ({ type, onlineCheckinStatus, onBack }) => {
   const { t } = useContext(LanguageContext);
+
+  const onlineCheckinConfig = onlineCheckinStatus === OnlineCheckinVerificationStatus.PENDING_REVIEW
+    ? {
+        icon: <AlertTriangle size={48} className="text-yellow-400" />,
+        bg: 'bg-yellow-50',
+        border: 'border-yellow-100',
+        titleColor: 'text-yellow-800',
+        bodyColor: 'text-yellow-700',
+        title: t('authBlockedPendingTitle'),
+        body: t('authBlockedPendingBody'),
+      }
+    : onlineCheckinStatus === OnlineCheckinVerificationStatus.REJECTED
+      ? {
+          icon: <XCircle size={48} className="text-red-400" />,
+          bg: 'bg-red-50',
+          border: 'border-red-100',
+          titleColor: 'text-red-700',
+          bodyColor: 'text-red-600',
+          title: t('authBlockedRejectedTitle'),
+          body: t('authBlockedRejectedBody'),
+        }
+      : {
+          icon: <AlertTriangle size={48} className="text-yellow-400" />,
+          bg: 'bg-yellow-50',
+          border: 'border-yellow-100',
+          titleColor: 'text-yellow-800',
+          bodyColor: 'text-yellow-700',
+          title: t('authBlockedOnlineCheckinTitle'),
+          body: t('authBlockedOnlineCheckinBody'),
+        };
 
   const config = {
     cancelled: {
@@ -380,15 +714,7 @@ const AuthBlockedView: React.FC<{
       title: t('authBlockedCancelledTitle'),
       body: t('authBlockedCancelledBody'),
     },
-    online_checkin_required: {
-      icon: <AlertTriangle size={48} className="text-yellow-400" />,
-      bg: 'bg-yellow-50',
-      border: 'border-yellow-100',
-      titleColor: 'text-yellow-800',
-      bodyColor: 'text-yellow-700',
-      title: t('authBlockedOnlineCheckinTitle'),
-      body: t('authBlockedOnlineCheckinBody'),
-    },
+    online_checkin_required: onlineCheckinConfig,
     not_eligible: {
       icon: <AlertTriangle size={48} className="text-gray-400" />,
       bg: 'bg-gray-50',
@@ -424,7 +750,7 @@ const AuthBlockedView: React.FC<{
             onClick={onBack}
             className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 transition-colors"
           >
-            ← Back to Login
+            {t('backToLogin')}
           </button>
         </div>
 

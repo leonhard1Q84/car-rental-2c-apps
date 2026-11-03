@@ -55,7 +55,17 @@ for (const file of sources) {
     if (path.isAbsolute(specifier)) issues.push(`Absolute import in ${relative(file)}: ${specifier}`);
     const resolved = ts.resolveModuleName(specifier, file, config.options, ts.sys).resolvedModule;
     if (!resolved) {
-      if (!specifier.endsWith('.css')) issues.push(`Unresolved import in ${relative(file)}: ${specifier}`);
+      const asset = /\.(?:css|svg|png|jpe?g|webp)$/.test(specifier) && specifier.startsWith('.')
+        ? path.resolve(path.dirname(file), specifier)
+        : null;
+      if (!asset || !fs.existsSync(asset) || !fs.statSync(asset).isFile()) {
+        // Vite handles static assets outside TypeScript module resolution.
+        if (specifier !== '@shared/styles/tailwind.css' || !fs.existsSync(path.join(root, 'src/shared/styles/tailwind.css'))) {
+          issues.push(`Unresolved import in ${relative(file)}: ${specifier}`);
+        }
+      } else if (relative(asset).startsWith(`..${path.sep}`)) {
+        issues.push(`Asset outside repository: ${relative(file)}`);
+      }
       return;
     }
     const destination = relative(resolved.resolvedFileName);

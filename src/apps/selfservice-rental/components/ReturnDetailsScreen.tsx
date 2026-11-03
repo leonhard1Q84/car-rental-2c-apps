@@ -32,10 +32,10 @@ const ReadOnlyPhoto: React.FC<{ label: string; src?: string | null; large?: bool
 const ReturnDetailsScreen: React.FC<ReturnDetailsScreenProps> = ({ setView, orderDetails }) => {
   const { t } = useContext(LanguageContext);
 
-  // Mocked Return Data (In a real app, this would be passed from a parent state or fetched)
+  const returnMetrics = orderDetails.returnVehicleMetricCheckpoint?.finalMetrics;
+
+  // Non-metric return evidence remains mocked until the return submission model stores those fields.
   const mockReturnData = {
-      mileage: 12600,
-      fuel: 68,
       notes: "Parked near pillar B-12, Level B2",
       damageNote: "No new damage found. Slight scratch on left bumper pre-existed.",
       photos: {
@@ -48,7 +48,7 @@ const ReturnDetailsScreen: React.FC<ReturnDetailsScreenProps> = ({ setView, orde
       }
   };
 
-  const fuelLevels = Math.round((mockReturnData.fuel / 100) * 8);
+  const fuelLevels = returnMetrics ? Math.round((returnMetrics.energyPercent / 100) * 8) : undefined;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -80,11 +80,15 @@ const ReturnDetailsScreen: React.FC<ReturnDetailsScreenProps> = ({ setView, orde
              <div className="grid grid-cols-2 gap-4">
                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                      <span className="block text-xs text-gray-500 mb-1">{t('mileageLabel')}</span>
-                     <span className="block text-lg font-mono font-bold text-gray-800">{mockReturnData.mileage.toLocaleString()}</span>
+                     <span className="block text-lg font-mono font-bold text-gray-800">
+                       {returnMetrics ? returnMetrics.mileageKm.toLocaleString() : '-'}
+                     </span>
                  </div>
                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                      <span className="block text-xs text-gray-500 mb-1">{t('fuelLevelLabel')}</span>
-                     <span className="block text-lg font-mono font-bold text-gray-800">{fuelLevels}/8</span>
+                     <span className="block text-lg font-mono font-bold text-gray-800">
+                       {fuelLevels === undefined ? '-' : `${fuelLevels}/8`}
+                     </span>
                  </div>
              </div>
          </div>

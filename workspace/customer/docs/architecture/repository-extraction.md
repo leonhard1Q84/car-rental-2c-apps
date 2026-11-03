@@ -4,14 +4,14 @@
 - 新仓库：`ixtech-ai/ixtech-2c-apps`
 - 来源仓库：`ixtech-ai/ixtech-app-antigravity`
 - 来源本地目录：`/Users/admin/Desktop/selfservice_rental`
-- 来源 HEAD：`700a401131fc8f17ef3ac762d12885eaedc7c4ab`
-- 来源范围：迁移时的本地工作区快照，不仅是 HEAD。
+- 当前来源：Codeup `main@d6e5b1c31fbe0299c7d09bfec65659fad495f213`，已实际 fetch 并核对分支 HEAD。
+- 首次拆分对照：`700a401131fc8f17ef3ac762d12885eaedc7c4ab` 的本地工作区快照。当前客户端已更新至上述 Codeup 提交。
 
 ## 迁入范围
 
 - `src/apps/selfservice-rental` 全量保留，包含页面、App 组织、类型、翻译、设计 tokens 与演示账号。
 - `src/shared/styles/tailwind.css` 保留既有主题和 utilities，删除商户扫描目录，禁用工作区自动扫描，仅显式扫描客户端与 shared。
-- `src/shared/domain/fulfillment` 保留稳定领域契约，满足客户端 guard 的类型引用；其中的外部履约枚举原样保留。
+- `src/shared` 按客户端和客户回归脚本引用闭包保留领域类型、车辆读数组件、API 与存储适配器；其中的外部履约语义原样保留。
 - `workspace/customer` 全量保留客户文档和 PDF 参考材料。
 - `workspace/shared` 仅迁入 schema、API contract、glossary、event taxonomy 和 templates，未迁入历史参考工程和商户资产。
 - 协作规则改为客户端单一应用范围。
@@ -49,3 +49,20 @@
 - 构建预览 HTTP 检查：`/`、`/selfservice.html` 及其引用的 JS/CSS 均返回 200；两个入口使用同一客户端 bundle。
 - 来源比对：客户 App 91 个文件内容完全一致；原工作区快照中的文件未被本次操作修改。
 - 未进行浏览器业务交互或生产联调，不据此宣称真实支付、签约及车控验收通过。
+
+### Codeup main@d6e5b1c 同步
+
+在新仓库 fetch 来源 `main`，确认 HEAD 为 `d6e5b1c31fbe0299c7d09bfec65659fad495f213` 后按该提交提取客户内容。没有合并来源商户历史，也没有引入独立续租分支。
+
+- 同步 `pickup-preparation`、Online Check-in、资料补正、在线验车、合同签署、驾驶人合照及客户评价代码和相应规格。
+- `flow=pickup-preparation` 路由与身份核验开启状态沿用来源；续约仍为门店 `tel:` 链接。
+- 迁入 13 个客户专属回归脚本；依赖商户源码的跨端脚本留在来源仓库。
+- 来源 `translations.ts` 有 1763 行，拆为 5 个既有语言资源文件；已深度比较完整翻译对象，资源 key、值及顺序一致。取车准备的六语资源另按来源保留。
+- 补齐 React 开发类型；只调整 LanguageContext 旧查询的兼容类型、服务入口 i18n key 类型和验车状态的判别联合。上述 3 个文件编译后 JS 与来源保持一致。
+- 来源旧验车详情仍查询部分未提供资源的 `verification*` key；本次保留其运行时行为，不把类型适配当成翻译补齐。
+- `test-pickup-preparation.mjs` 的旧文案断言在原始来源快照中也失败：截止提示与弹窗文案共享前缀，原断言按子串误判。改为判断独立文本节点，并固定测试时钟在截止前，保留截止边界显式用例，避免随真实日期失效。
+- 新增空值 API 配置样例。未配置 API 时继续使用本地演示；拆为不同源部署后，IndexedDB 不跨源共享，两端联动依赖共同后端。
+
+本轮验证：独立 `npm ci`、208 个源码文件的边界检查、TypeScript 类型检查、13 个客户回归脚本与生产构建全部通过。195 个来源客户文件逐字节一致，3 个类型适配文件编译后的 JS 一致，拆分后的完整翻译对象深度相等。HTTP 预览检查覆盖 `/`、`/selfservice.html`、`/selfservice.html?flow=pickup-preparation` 及其 JS/CSS；12 张构建输出的验车图片均返回完整响应。未进行浏览器交互或线上部署验证。
+
+当前客户端共用 JS bundle 约 847 kB，Vite 有超过默认 500 kB 阈值的体积提示，构建成功；本次保留来源装载方式，未增加异步分包行为。

@@ -119,9 +119,9 @@ const InspectionDetailsScreen: React.FC<InspectionDetailsScreenProps> = ({ setVi
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h2 className="font-bold flex items-center text-gray-900 mb-3">
             <ShieldCheck className="mr-2 text-primary" size={20} />
-            {t('driverVerificationTitle')}
+            {t('driverPhotoTitle')}
           </h2>
-          {verificationStatusConfig && (
+          {!record?.driverPhotoConfirmation && verificationStatusConfig && (
             <div className={`mb-3 rounded-xl border px-3 py-3 ${verificationStatusConfig.containerClass}`}>
               <div className={`flex items-center text-sm font-semibold ${verificationStatusConfig.textClass}`}>
                 <verificationStatusConfig.icon size={16} className="mr-2" />
@@ -138,11 +138,23 @@ const InspectionDetailsScreen: React.FC<InspectionDetailsScreenProps> = ({ setVi
               )}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            {verificationPhotos.map((photo, index) => (
-              <ReadOnlyPhoto key={`${photo}-${index}`} label={`${t('driverVerificationTitle')} ${index + 1}`} src={photo} />
-            ))}
-          </div>
+          {record?.driverPhotoConfirmation ? (
+            <div className="space-y-4">
+              {record.driverPhotoConfirmation.drivers.map(driver => (
+                <div key={driver.id}>
+                  <p className="break-words text-sm font-semibold text-gray-900">{driver.name}</p>
+                  <p className="mb-2 text-xs text-gray-500">{t(driver.role === 'primary' ? 'driverPhotoPrimary' : 'driverPhotoAdditional')} · {t('driverPhotoUploaded')}</p>
+                  <ReadOnlyPhoto label={driver.name} src={driver.photo} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {verificationPhotos.map((photo, index) => (
+                <ReadOnlyPhoto key={`${photo}-${index}`} label={`${t('driverPhotoTitle')} ${index + 1}`} src={photo} />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">

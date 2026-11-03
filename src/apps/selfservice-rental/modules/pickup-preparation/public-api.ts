@@ -1,0 +1,1 @@
+export { PickupPreparationApp } from './PickupPreparationApp';

@@ -1,4 +1,8 @@
-
+import type {
+  PickupContractConfigSnapshot,
+  PickupContractConfirmationRecord,
+  VehicleMetricCheckpoint
+} from '@shared/contracts';
 export enum CanonicalStatus {
   CREATED = 'CREATED',
   RESERVED = 'RESERVED',
@@ -19,8 +23,8 @@ export enum OnlineCheckinVerificationStatus {
 }
 
 export type ResidencyStatus = 'local' | 'international';
-export type ContractSignStatus = 'UNSIGNED' | 'SIGNED';
-export type ContractAttachmentStatus = 'GENERATING' | 'READY';
+export type ContractSignStatus = 'UNSIGNED' | 'SIGNING' | 'SIGNED' | 'SIGN_FAILED';
+export type ContractAttachmentStatus = 'NOT_READY' | 'GENERATING' | 'READY' | 'FAILED';
 export type ContractDocKey =
   | 'home_country_license_front'
   | 'home_country_license_back'
@@ -45,7 +49,47 @@ export interface ContractFormState {
   agreed: boolean;
 }
 
-export type InspectionVerificationStatus = 'idle' | 'pending_review' | 'approved' | 'rejected';
+export interface OrderAddonSnapshotItem {
+  code: string;
+  name: string;
+  quantity: number;
+  unitPrice?: number;
+  subtotal?: number;
+  currency?: string;
+}
+
+export interface OrderAddons {
+  online_booking: OrderAddonSnapshotItem[];
+  store_addons: OrderAddonSnapshotItem[];
+}
+
+export interface PickupAddonsSnapshot extends OrderAddons {
+  frozen_at: string;
+}
+
+export type InspectionVerificationStatus = 'idle' | 'pending_review' | 'approved' | 'rejected' | 'uploaded';
+
+export type DriverCredentialType = 'japan' | 'idp' | 'translation' | 'myna';
+export interface RegisteredPickupDriver {
+  id: string;
+  name: string;
+  role: 'primary' | 'additional';
+  credentialType: DriverCredentialType;
+}
+export interface OnlineCheckinDriverSnapshot {
+  revision: string;
+  drivers: RegisteredPickupDriver[];
+}
+export interface DriverPhotoEvidence extends RegisteredPickupDriver {
+  photo: string;
+  savedAt: string;
+}
+export interface DriverPhotoConfirmation {
+  orderId: string;
+  vehicleId: string;
+  driverRevision: string;
+  drivers: DriverPhotoEvidence[];
+}
 export type InspectionExteriorKey = 'front' | 'rear' | 'left' | 'right';
 export type InspectionLightKey = 'front' | 'rear';
 export type InspectionDecisionMode = 'skip' | 'report';
@@ -65,12 +109,13 @@ export interface InspectionBaselineSnapshot {
 export interface InspectionSubmissionRecord {
   submittedAt: string;
   vehicleStats: {
-    mileage: number;
-    fuel: number;
+    mileage?: number;
+    fuel?: number;
   };
   verificationStatus: InspectionVerificationStatus;
   verificationReviewReason?: string;
   verificationPhotos: string[];
+  driverPhotoConfirmation?: DriverPhotoConfirmation;
   exteriorPhotos: Record<InspectionExteriorKey, string[]>;
   lightPhotos: Record<InspectionLightKey, string[]>;
   damageDescription: string;
@@ -79,11 +124,15 @@ export interface InspectionSubmissionRecord {
   exceptionNote?: string;
   termsAgreedAt?: string;
   termsVersion?: string;
+  contractConfirmationRecord?: PickupContractConfirmationRecord;
   baselineSnapshot?: InspectionBaselineSnapshot;
+  vehicleMetricCheckpoint?: VehicleMetricCheckpoint;
+  dashboardPhoto?: string;
 }
 
 export enum AppView {
   AUTH = 'AUTH',
+  ONLINE_CHECKIN = 'ONLINE_CHECKIN',
   OVERVIEW = 'OVERVIEW',
   INSPECTION = 'INSPECTION',
   INSPECTION_DETAILS = 'INSPECTION_DETAILS',
@@ -103,10 +152,17 @@ export enum AppView {
 
 export interface OrderDetails {
   orderNumber: string;
+  /** Submitted and approved Online Check-in roster; never inferred from the customer name. */
+  onlineCheckinDrivers?: OnlineCheckinDriverSnapshot;
   confirmationCode: string;
   canonical_status: CanonicalStatus;
   online_checkin_verification_status: OnlineCheckinVerificationStatus;
   contract_sign_status: ContractSignStatus;
+  pickup_completed_at?: string;
+  /** Latest order add-ons before pickup; copied into pickup_addons_snapshot at pickup completion. */
+  addons: OrderAddons;
+  pickup_addons_snapshot?: PickupAddonsSnapshot;
+  contract_signed_at?: string;
   rentalPeriod: {
     start: string;
     end: string;
@@ -122,8 +178,11 @@ export interface OrderDetails {
     fuelLevel: number; // percentage
     range: number; // km
     odometer: number; // km
+    fuelType?: string;
     parkingSpot?: string;
     isLocked: boolean; // Add lock state
+    telematicsStatus?: 'INSTALLED_ONLINE' | 'INSTALLED_OFFLINE' | 'NOT_INSTALLED';
+    telematicsLastReadingAt?: string;
     coordinates?: {
       lat: number;
       lng: number;
@@ -132,10 +191,16 @@ export interface OrderDetails {
   pickupLocation: string;
   pickupLocationDetails: {
     name: string;
+    address?: string;
     phone: string;
   };
   pickupInstructions: string; // Add explicit instruction field
   returnLocation: string;
+  returnParkingPlan: {
+    status: 'ACTIVE' | 'NOT_SET' | 'REFRESH_REQUIRED' | 'REPLAN_REQUIRED' | 'SWITCH_REQUIRED' | 'UNAVAILABLE';
+    parkingName?: string;
+    address?: string;
+  };
   returnCoordinates?: { // Coordinates for the designated return parking spot
     lat: number;
     lng: number;
@@ -166,8 +231,25 @@ export interface OrderDetails {
   is_selfservice_eligible: boolean; // Add eligibility flag
   isIdentityVerified: boolean;
   isDepositPaid: boolean; // Computed as status IN (3, 4, 5)
-  isRentalActive: boolean; // True after contract sign and user clicks "Start Use"
+  isRentalActive: boolean; // True after pickup, signing, and contract artifact generation complete
   isReturned: boolean; // True after return flow is complete
+  pickupContractConfigSnapshot?: PickupContractConfigSnapshot;
+  returnVehicleMetricCheckpoint?: VehicleMetricCheckpoint;
+  returnDashboardPhoto?: string;
+  returnConditionReport?: CustomerReturnConditionReport;
+}
+
+export interface CustomerReturnConditionReport {
+  exteriorPhotos: Partial<Record<'front' | 'rear' | 'left' | 'right', PhotoFile[]>>;
+  hasDamage: boolean;
+  damageDescription?: string;
+  damagePhotos: PhotoFile[];
+}
+
+export interface CustomerReturnSubmission {
+  vehicleMetricCheckpoint?: VehicleMetricCheckpoint;
+  dashboardPhoto?: string;
+  conditionReport: CustomerReturnConditionReport;
 }
 
 export interface PhotoFile {

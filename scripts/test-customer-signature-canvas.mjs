@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import { createServer } from 'vite';
+const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false } });
+try {
+  const { resizeSignatureCanvas } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/signatureCanvasSize.ts');
+  let transform = 2, clears = 0, strokes = [];
+  const context = { getTransform: () => ({ a: transform }), setTransform: value => { transform = value; } };
+  const canvas = { width: 0, height: 0, offsetWidth: 0, offsetHeight: 0, getContext: () => context };
+  const pad = { getCanvas: () => canvas, toData: () => strokes, clear: () => { clears++; strokes = []; }, fromData: value => { strokes = value; } };
+  resizeSignatureCanvas(pad, 2);
+  assert.equal(clears, 0, 'hidden mount must not reset the canvas');
+  canvas.offsetWidth = 360; canvas.offsetHeight = 192;
+  resizeSignatureCanvas(pad, 2);
+  assert.deepEqual([canvas.width, canvas.height, transform], [720, 384, 2], 'showing the hidden canvas restores drawable dimensions');
+  strokes = [[{ x: 180, y: 96, time: 123, color: 'black' }, { x: 240, y: 100, time: 124, color: 'black' }]];
+  const original = structuredClone(strokes);
+  resizeSignatureCanvas(pad, 2);
+  assert.equal(clears, 1, 'unchanged dimensions must not clear existing handwriting');
+  canvas.offsetWidth = 0; canvas.offsetHeight = 0;
+  resizeSignatureCanvas(pad, 2);
+  assert.deepEqual(strokes, original, 'revisiting photos preserves hidden signature');
+  assert.deepEqual([canvas.width, canvas.height], [720, 384]);
+  canvas.offsetWidth = 180; canvas.offsetHeight = 192;
+  resizeSignatureCanvas(pad, 3);
+  assert.deepEqual([canvas.width, canvas.height, transform], [540, 576, 3]);
+  assert.deepEqual(strokes[0][0], { ...original[0][0], x: 90 }, 'width change rescales points while preserving their metadata');
+  assert.deepEqual(original[0][0].x, 180, 'original point data is not mutated');
+  pad.clear();
+  canvas.offsetWidth = 360;
+  resizeSignatureCanvas(pad, 1);
+  assert.deepEqual(strokes, [], 'resizing cannot restore a cleared signature');
+  console.log('Signature canvas: hidden-to-visible recovery, zero-size guard, unchanged-size no-op, handwriting preservation, resize/DPR mapping and clear passed.');
+} finally { await server.close(); }

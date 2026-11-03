@@ -39,5 +39,6 @@
 - 开发：`npm run dev`
 - 边界检查：`npm run check:boundaries`
 - 类型检查：`npm run typecheck`
+- 客户回归：`npm run test:customer`
 - 构建：`npm run build`
 - 预览：`npm run preview`

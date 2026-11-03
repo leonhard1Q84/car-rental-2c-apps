@@ -28,6 +28,8 @@
 - dispatch extension:
   - `rental-order-car-dispatch-info.md`
   - `rental-order-car-dispatch-extend.md`
+- vehicle metric checkpoint:
+  - `车辆读数检查点.md`
 
 ## 当前未抽取
 

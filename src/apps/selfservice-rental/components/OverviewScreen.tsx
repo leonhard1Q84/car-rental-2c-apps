@@ -2,7 +2,9 @@
 
 import React, { useContext, useState } from 'react';
 import { AppView, OrderDetails } from '../types';
-import { Car, CheckCircle, ShieldCheck, FileSignature, Search, Languages, Clipboard, Check, Phone, MessageSquare, MapPin, Gauge, Fuel, Navigation, Lightbulb, Lock, Unlock, FileText, ChevronRight, Clock, Loader2, UserCheck, BookOpen } from 'lucide-react';
+import { Car, CheckCircle, ShieldCheck, FileSignature, Search, Clipboard, Check, MapPin, Gauge, Fuel, Navigation, Lightbulb, Lock, Unlock, FileText, ChevronRight, Clock, Loader2, UserCheck, BookOpen, CircleParking } from 'lucide-react';
+import OverviewHeader from './OverviewHeader';
+import OverviewStoreInfoCard from './OverviewStoreInfoCard';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { DEFAULT_RENTAL_CAR_IMAGE, getSafeImageSrc } from '../utils/imageFallback';
 
@@ -10,6 +12,7 @@ interface OverviewScreenProps {
     orderDetails: OrderDetails;
     setView: (view: AppView) => void;
     inspectionCompleted: boolean;
+    onRetryContractGeneration?: () => void;
 }
 
 interface JourneyStep {
@@ -45,53 +48,42 @@ const FuelGaugeMini: React.FC<{ percentage: number }> = ({ percentage }) => {
     );
 };
 
-const LanguageSwitcher: React.FC = () => {
-    const { setLang, lang, t } = useContext(LanguageContext);
-    const languages = [
-        { code: 'en', name: 'English' },
-        { code: 'zh-TW', name: '繁體中文' },
-        { code: 'ja', name: '日本語' },
-        { code: 'ko', name: '한국어' },
-        { code: 'th', name: 'ไทย' },
-    ];
-
-    return (
-        <div className="relative">
-            <select
-                value={lang}
-                onChange={(e) => setLang(e.target.value as any)}
-                className="appearance-none bg-primary-dark text-white rounded-md py-1 pl-3 pr-8 text-sm focus:outline-none"
-            >
-                {languages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
-            </select>
-            <Languages className="absolute right-2 top-1/2 -translate-y-1/2 text-white pointer-events-none" size={16} />
-        </div>
-    );
-}
-
-const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, inspectionCompleted }) => {
+const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, inspectionCompleted, onRetryContractGeneration }) => {
     const { vehicle } = orderDetails;
     const { t } = useContext(LanguageContext);
     const [copied, setCopied] = useState(false);
+    const [copyFailed, setCopyFailed] = useState(false);
     const [activeAction, setActiveAction] = useState<string | null>(null);
     const [isLocked, setIsLocked] = useState(vehicle.isLocked);
 
     const isRentalActive = orderDetails.isRentalActive;
     const isReturned = orderDetails.isReturned;
+    const isPickupCompleted =
+        orderDetails.canonical_status === 'PICKED_UP' && Boolean(orderDetails.pickup_completed_at);
     const isContractSigned = orderDetails.contract_sign_status === 'SIGNED';
     const contractAttachmentUrl = orderDetails.contract.attachment_url?.trim() || '';
     const isContractDownloadReady =
         isContractSigned &&
         orderDetails.contract.attachment_status === 'READY' &&
         contractAttachmentUrl.length > 0;
-    const isContractGenerating = isContractSigned && !isContractDownloadReady;
+    const isContractGenerating = isContractSigned
+        && orderDetails.contract.attachment_status === 'GENERATING';
+    const isContractFailed = isContractSigned
+        && orderDetails.contract.attachment_status === 'FAILED';
     const isPreparing = orderDetails.preparationStatus === 'Preparing';
     const isDepositPaid = [3, 4, 5].includes(orderDetails.deposit.status);
+    const showPickupParkingFeeNotice = !isPickupCompleted && !isRentalActive && !isReturned;
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(orderDetails.confirmationCode);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const handleCopy = async () => {
+        setCopied(false);
+        setCopyFailed(false);
+        try {
+            await navigator.clipboard.writeText(orderDetails.confirmationCode);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            setCopyFailed(true);
+        }
     };
 
     const handleAction = (action: string) => {
@@ -116,6 +108,8 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
         anchor.click();
         document.body.removeChild(anchor);
     };
+
+    const openServiceTerms = () => setView(AppView.SERVICE_TERMS);
 
     const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
         if (event.currentTarget.src !== DEFAULT_RENTAL_CAR_IMAGE) {
@@ -154,10 +148,18 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
         {
             name: t('stepContract'),
             completed: isContractSigned,
-            action: isContractSigned ? (isContractDownloadReady ? t('view') : t('contractGenerating')) : t('stepContractAction'),
-            enabled: (isDepositPaid && inspectionCompleted && !isContractSigned) || isContractDownloadReady,
+            action: isContractSigned
+                ? (isContractDownloadReady ? t('view') : isContractFailed ? t('contractRetry') : t('contractGenerating'))
+                : t('stepContractAction'),
+            enabled: (isPickupCompleted && !isContractSigned)
+                || isContractDownloadReady
+                || (isContractSigned && orderDetails.contract.attachment_status === 'FAILED'),
             handler: () => {
                 if (isContractSigned) {
+                    if (isContractFailed) {
+                        onRetryContractGeneration?.();
+                        return;
+                    }
                     handleContractDownload();
                     return;
                 }
@@ -276,21 +278,18 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
 
     // Pre-Pickup Hero Widget
     const PrePickupHero = () => (
-        <div
-            className={`bg-white rounded-xl shadow-lg transition-all relative overflow-hidden group mb-6 ${!isPreparing ? 'cursor-pointer hover:shadow-xl' : ''}`}
-            onClick={() => !isPreparing && setView(AppView.VEHICLE_STATUS)}
-        >
+        <div className="relative mb-6 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
             {/* Title is now external, this is just card content */}
             <div className="p-5">
-                <div className="flex items-center space-x-4 mt-2">
+                <div className="flex items-start gap-4">
                     <img
                         src={getSafeImageSrc(vehicle.image)}
                         alt={vehicle.name}
-                        className={`w-28 h-auto object-contain ${isPreparing ? 'opacity-80' : ''}`}
+                        className={`h-24 w-24 shrink-0 rounded-lg bg-gray-50 object-contain sm:h-28 sm:w-28 ${isPreparing ? 'opacity-80' : ''}`}
                         onError={handleImageError}
                     />
-                    <div className="flex-1">
-                        <h3 className="text-lg font-bold text-gray-900">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="break-words text-xl font-bold leading-snug text-gray-900">
                             {vehicle.name} {isPreparing && <span className="text-gray-500 text-sm font-normal">{t('orSimilar')}</span>}
                         </h3>
 
@@ -300,23 +299,23 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
                                 {t('preparingBadge')}
                             </div>
                         ) : (
-                            <div className="flex items-center text-sm text-primary font-semibold mt-1">
-                                <MapPin size={14} className="mr-1" />
-                                {t('parkingSpot')}: {vehicle.parkingSpot || 'A-23'}
+                            <div className="mt-2 flex items-start gap-1.5 text-sm font-medium leading-relaxed text-primary">
+                                <MapPin size={16} className="mt-0.5 shrink-0" />
+                                <span className="min-w-0 break-words">{t('parkingSpot')}: {vehicle.parkingSpot || orderDetails.pickupLocation || t('locationInfoPending')}</span>
                             </div>
                         )}
                     </div>
                 </div>
 
                 {/* Divider */}
-                <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-2 text-sm">
+                <div className="mt-5 grid grid-cols-2 gap-4 border-t border-gray-100 pt-4 text-sm">
                     <div>
-                        <p className="text-gray-500 uppercase text-[10px] font-bold">{t('licensePlate')}</p>
-                        <p className="font-medium">{isPreparing ? '----' : (vehicle.state + ' ' + vehicle.licensePlate)}</p>
+                        <p className="text-xs font-medium text-gray-500">{t('licensePlate')}</p>
+                        <p className="mt-1 break-words font-semibold text-gray-900">{isPreparing ? '----' : (vehicle.state + ' ' + vehicle.licensePlate)}</p>
                     </div>
                     <div>
-                        <p className="text-gray-500 uppercase text-[10px] font-bold">{t('color')}</p>
-                        <p className="font-medium">{isPreparing ? '--' : vehicle.color}</p>
+                        <p className="text-xs font-medium text-gray-500">{t('color')}</p>
+                        <p className="mt-1 break-words font-semibold text-gray-900">{isPreparing ? '--' : vehicle.color}</p>
                     </div>
                 </div>
 
@@ -326,19 +325,14 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
                         <p className="text-xs font-medium leading-relaxed">{t('preparingDesc')}</p>
                     </div>
                 ) : (
-                    <div className="mt-4 bg-primary/10 rounded-lg p-2.5 flex items-center justify-center text-primary font-bold text-sm group-hover:bg-primary group-hover:text-white transition-colors">
+                    <button type="button" onClick={() => setView(AppView.VEHICLE_STATUS)} className="mt-4 flex min-h-11 w-full items-center justify-center rounded-lg bg-gray-50 p-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary">
                         <Navigation size={16} className="mr-2" />
                         {t('findCar')}
-                    </div>
+                    </button>
                 )}
             </div>
         </div>
     );
-
-    const getHeaderTitle = () => {
-        // Requested Change: Title is always My Trip for active states, even after return
-        return t('myRentalTitle');
-    };
 
     // Logic to determine which status title to show OUTSIDE the card
     const getStatusTitle = () => {
@@ -350,24 +344,25 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
 
     return (
         <div className="bg-gray-50 min-h-screen flex flex-col">
-            <header className="bg-primary p-4 text-white flex justify-between items-center sticky top-0 z-20 shadow-md">
-                <h1 className="text-lg font-bold">{getHeaderTitle()}</h1>
-                <LanguageSwitcher />
-            </header>
+            <OverviewHeader />
 
             <main className="p-4 relative z-10 flex-grow pb-16">
 
                 {/* Order Ref Strip */}
-                <div className="bg-white px-4 py-2 rounded-lg shadow-sm flex justify-between items-center mb-4 text-sm">
-                    <div className="flex items-center space-x-1 truncate">
-                        <span className="text-gray-500">{t('confirmationNumberLabel')}</span>
-                        <button onClick={() => setView(AppView.RESERVATION_DETAILS)} className="font-bold text-primary hover:underline">
-                            {orderDetails.confirmationCode}
+                <div className="mb-5 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-gray-500">{t('confirmationNumberLabel')}</p>
+                            <button onClick={() => setView(AppView.RESERVATION_DETAILS)} className="min-h-11 max-w-full break-all py-1 text-left text-base font-semibold leading-snug text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+                                {orderDetails.confirmationCode}
+                            </button>
+                        </div>
+                        <button type="button" onClick={handleCopy} aria-label={t(copied ? 'copied' : 'copy')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-gray-100 text-gray-500 transition-colors hover:bg-gray-50 hover:text-primary focus-visible:outline-2 focus-visible:outline-primary">
+                            {copied ? <Check size={18} className="text-green-600" /> : <Clipboard size={18} />}
                         </button>
                     </div>
-                    <button onClick={handleCopy} className="text-gray-400 hover:text-primary transition-colors">
-                        {copied ? <Check size={16} className="text-green-500" /> : <Clipboard size={16} />}
-                    </button>
+                    <p role="status" className="text-xs text-green-700">{copied ? t('copied') : ''}</p>
+                    {copyFailed && <p role="alert" className="mt-2 text-sm text-red-700">{t('prepCopyFailed')}</p>}
                 </div>
 
                 {/* External Title for Hero/Dashboard */}
@@ -378,6 +373,31 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
                     ? <ActiveRentalDashboard /> // Show dashboard with disabled controls
                     : (isRentalActive ? <ActiveRentalDashboard /> : <PrePickupHero />)
                 }
+
+                {showPickupParkingFeeNotice && (
+                    <section
+                        aria-labelledby="pickup-parking-fee-notice-title"
+                        className="flex items-start rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950"
+                    >
+                        <CircleParking size={20} className="mr-3 mt-0.5 flex-shrink-0 text-amber-700" />
+                        <div className="min-w-0 flex-1">
+                            <h3 id="pickup-parking-fee-notice-title" className="text-sm font-bold">
+                                {t('pickupParkingFeeNoticeTitle')}
+                            </h3>
+                            <p className="mt-1 text-sm leading-relaxed text-amber-900">
+                                {t('pickupParkingFeeNoticeBody')}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={openServiceTerms}
+                                className="mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-amber-800 underline decoration-amber-500 decoration-dashed underline-offset-4 transition-colors hover:text-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50"
+                            >
+                                <span>{t('pickupParkingFeeDetailsLink')}</span>
+                                <ChevronRight size={16} aria-hidden="true" />
+                            </button>
+                        </div>
+                    </section>
+                )}
 
                 {/* Journey Timeline - Always Visible */}
                 <div className="bg-white p-5 rounded-xl shadow-lg mt-6">
@@ -402,13 +422,7 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
                             return (
                                 <div
                                     key={index}
-                                    className={`relative pl-12 pb-6 last:pb-0 ${isClickable ? 'cursor-pointer group' : 'opacity-60'}`}
-                                    onClick={(e) => {
-                                        if (isClickable && step.handler) {
-                                            e.stopPropagation();
-                                            step.handler();
-                                        }
-                                    }}
+                                    className="relative pb-6 pl-12 last:pb-0"
                                 >
                                     {/* Status Icon */}
                                     <div className={`absolute left-0 top-0 w-10 h-10 rounded-full flex items-center justify-center border-4 z-10 transition-colors ${step.completed ? 'bg-primary/10 border-white text-primary' :
@@ -418,21 +432,23 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
                                     </div>
 
                                     {/* Content */}
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className={`font-bold text-sm ${step.completed ? 'text-gray-800' : isCurrent ? 'text-primary' : 'text-gray-500'}`}>
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-[1_1_120px] pt-2">
+                                            <p className={`text-base font-semibold ${step.completed ? 'text-gray-800' : isCurrent ? 'text-primary' : 'text-gray-500'}`}>
                                                 {step.name}
                                             </p>
-                                            {step.note && <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{step.note}</p>}
+                                            {step.note && <p className="mt-1 whitespace-pre-line break-words text-sm leading-relaxed text-gray-500">{step.note}</p>}
                                         </div>
 
                                         {step.action && (isClickable || step.showDisabledAction) && (
                                             <button
+                                                type="button"
                                                 disabled={!isClickable}
-                                                className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${!isClickable
+                                                onClick={() => { if (isClickable) step.handler?.(); }}
+                                                className={`ml-auto min-h-11 shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${!isClickable
                                                     ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
                                                     : step.completed
-                                                        ? 'bg-gray-50 text-gray-600 border border-gray-200 group-hover:bg-gray-100'
+                                                        ? 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
                                                         : 'bg-primary text-white hover:bg-primary-dark shadow-sm'
                                                     }`}
                                             >
@@ -446,24 +462,7 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
                     </div>
                 </div>
 
-                {/* Location Card */}
-                <div className="bg-white p-4 rounded-xl shadow-lg mt-6">
-                    <h3 className="text-lg font-bold mb-3">{t('pickupLocationTitle')}</h3>
-                    <div className="space-y-1 mb-4">
-                        <p className="font-semibold text-gray-800">{orderDetails.pickupLocationDetails.name}</p>
-                        <p className="text-sm text-gray-600">{orderDetails.pickupLocation}</p>
-                    </div>
-                    <div className="pt-4 border-t grid grid-cols-2 gap-3">
-                        <a href={`tel:${orderDetails.pickupLocationDetails.phone}`} className="flex items-center justify-center space-x-2 py-2.5 px-4 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-                            <Phone size={18} />
-                            <span className="text-sm font-semibold">{t('call')}</span>
-                        </a>
-                        <a href={`https://wa.me/${orderDetails.pickupLocationDetails.phone}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center space-x-2 py-2.5 px-4 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-                            <MessageSquare size={18} />
-                            <span className="text-sm font-semibold">{t('message')}</span>
-                        </a>
-                    </div>
-                </div>
+                <OverviewStoreInfoCard store={orderDetails.pickupLocationDetails} />
 
                 {/* Rental Docs Link for active state ONLY (Hidden when returned) */}
                 {(isRentalActive && !isReturned) && (
@@ -479,9 +478,9 @@ const OverviewScreen: React.FC<OverviewScreenProps> = ({ orderDetails, setView, 
             </main>
 
             {/* Sticky Footer for Service Terms */}
-            <div className="bg-white border-t border-gray-200 p-4 sticky bottom-0 z-30">
+            <div className="sticky bottom-0 z-30 border-t border-gray-200 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
                 <button
-                    onClick={() => setView(AppView.SERVICE_TERMS)}
+                    onClick={openServiceTerms}
                     className="w-full flex items-center justify-center text-gray-500 hover:text-primary transition-colors py-2"
                 >
                     <BookOpen size={16} className="mr-2" />

@@ -1,11 +1,10 @@
 
 
 import React, { useState, useContext } from 'react';
-import { KeyRound, User, Languages, X } from 'lucide-react';
+import { ClipboardCheck, KeyRound, User, Languages, Users, X } from 'lucide-react';
 import { LanguageContext } from '../contexts/LanguageContext';
-import { VALID_ORDER_NOS } from '../mockAccounts';
-
-const VALID_LAST_NAME = 'smith'; // 统一姓氏，不区分大小写
+import { isValidMockCredentials, ONLINE_CHECKIN_NOT_STARTED_DEMO } from '../mockAccounts';
+import DemoAccountsDialog from './DemoAccountsDialog';
 
 interface AuthScreenProps {
     onAuthSuccess: (orderNo: string) => void;
@@ -26,7 +25,7 @@ const LanguageSwitcher: React.FC = () => {
             <select
                 value={lang}
                 onChange={(e) => setLang(e.target.value as any)}
-                className="appearance-none bg-gray-200 text-gray-700 rounded-md py-1 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="min-h-11 appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-8 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
                 {languages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
             </select>
@@ -43,6 +42,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isDemoAccountsOpen, setIsDemoAccountsOpen] = useState(false);
+
+    const startOnlineCheckinNotStartedDemo = () => {
+        setError('');
+        onAuthSuccess(ONLINE_CHECKIN_NOT_STARTED_DEMO.orderNo);
+    };
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
@@ -52,11 +57,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
         // Mock API call: 校验订单号存在 + 姓氏匹配
         setTimeout(() => {
             const normalizedOrderNo = orderNo.trim().toUpperCase();
-            const normalizedLastName = lastName.trim().toLowerCase();
-            if (
-                VALID_ORDER_NOS.includes(normalizedOrderNo) &&
-                normalizedLastName === VALID_LAST_NAME
-            ) {
+            if (isValidMockCredentials(normalizedOrderNo, lastName)) {
                 onAuthSuccess(normalizedOrderNo);
             } else {
                 setError(t('authError'));
@@ -66,8 +67,24 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-100">
-            <div className="absolute top-6 right-6">
+        <div className="relative flex min-h-screen flex-col items-center justify-center bg-gray-100 p-6">
+            <div
+                className="absolute z-10 flex max-w-[calc(100%-2rem)] items-center justify-end gap-2"
+                style={{
+                    top: 'max(1rem, env(safe-area-inset-top))',
+                    right: 'max(1rem, env(safe-area-inset-right))',
+                }}
+            >
+                <button
+                    type="button"
+                    onClick={() => setIsDemoAccountsOpen(true)}
+                    aria-haspopup="dialog"
+                    aria-expanded={isDemoAccountsOpen}
+                    className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                >
+                    <Users size={18} aria-hidden="true" />
+                    {t('demoAccountsButton')}
+                </button>
                 <LanguageSwitcher />
             </div>
 
@@ -128,6 +145,30 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                     <p className="text-xs text-gray-400 text-center mt-6" dangerouslySetInnerHTML={{ __html: t('authTerms') }} />
                 </form>
 
+                <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="online-checkin-demo-title">
+                    <div className="flex items-start gap-3">
+                        <ClipboardCheck className="mt-0.5 shrink-0 text-amber-700" size={20} aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                            <h2 id="online-checkin-demo-title" className="text-sm font-semibold text-amber-900">
+                                {t('demoOnlineCheckinNotStartedTitle')}
+                            </h2>
+                            <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                                {t('demoOnlineCheckinNotStartedBody')}
+                            </p>
+                            <p className="mt-2 text-xs text-amber-900">
+                                {t('demoOnlineCheckinNotStartedCredentials')}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={startOnlineCheckinNotStartedDemo}
+                                className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                            >
+                                {t('startCheckinDemo')}
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
                 <p className="text-xs text-gray-500 text-center mt-4" dangerouslySetInnerHTML={{ __html: t('authHelp') }} />
             </div>
 
@@ -147,6 +188,11 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                     </div>
                 </div>
             )}
+
+            <DemoAccountsDialog
+                isOpen={isDemoAccountsOpen}
+                onClose={() => setIsDemoAccountsOpen(false)}
+            />
         </div>
     );
 };

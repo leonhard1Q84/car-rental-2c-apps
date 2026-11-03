@@ -1,13 +1,13 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
-import { AppView, OrderDetails, ResidencyStatus } from '../types';
+import { AppView, OrderAddonSnapshotItem, OrderDetails, ResidencyStatus } from '../types';
 import { AlertTriangle, ArrowLeft, FileText, RefreshCw, X } from 'lucide-react';
 import { LanguageContext } from '../contexts/LanguageContext';
 
 interface ContractScreenProps {
   orderDetails: OrderDetails;
   setView: (view: AppView) => void;
-  onContractSign: () => void;
+  onContractSign: () => boolean;
 }
 
 interface DriverReadonlyProfile {
@@ -27,6 +27,13 @@ interface VerificationDocumentPreview {
 
 const CUSTOMER_BRAND_ACCENT = '#FF5A00';
 const CUSTOMER_BRAND_WARNING_ACCENT = '#F59E0B';
+
+const formatAddonAmount = (item: OrderAddonSnapshotItem): string => {
+  if (typeof item.subtotal !== 'number' || !Number.isFinite(item.subtotal)) return '-';
+  return [item.currency, item.subtotal.toLocaleString(undefined, { maximumFractionDigits: 2 })]
+    .filter(Boolean)
+    .join(' ');
+};
 
 const createDocumentPreview = (title: string, subtitle: string, accent: string): string => {
   const svg = `
@@ -88,6 +95,7 @@ const ContractScreen: React.FC<ContractScreenProps> = ({ orderDetails, setView, 
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureModalError, setSignatureModalError] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const driverProfile = useMemo<DriverReadonlyProfile>(() => {
     const derived = deriveName(orderDetails.customer.name);
@@ -176,6 +184,19 @@ const ContractScreen: React.FC<ContractScreenProps> = ({ orderDetails, setView, 
   };
 
   const handleSubmit = () => {
+    if (orderDetails.contract_sign_status === 'SIGNED' || isSubmitting) {
+      setGlobalError(t('contractAlreadySigned'));
+      return;
+    }
+    if (
+      orderDetails.canonical_status !== 'PICKED_UP'
+      || !orderDetails.pickup_completed_at
+      || !orderDetails.pickup_addons_snapshot
+      || orderDetails.contract.attachment_status === 'FAILED'
+    ) {
+      setGlobalError(t('contractPickupRequired'));
+      return;
+    }
     if (!signatureDataUrl) {
       setGlobalError(`${t('contractSignatureLabel')}: ${t('contractSignatureRequired')}`);
       return;
@@ -186,11 +207,13 @@ const ContractScreen: React.FC<ContractScreenProps> = ({ orderDetails, setView, 
     }
 
     setGlobalError(null);
-    onContractSign();
+    setIsSubmitting(true);
+    const accepted = onContractSign();
+    if (!accepted) setIsSubmitting(false);
   };
 
   const renderReadonlyField = (label: string, value: string, source?: string) => (
-    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+    <div className="min-w-0 border-b border-gray-100 py-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{label}</p>
         {source && <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 border border-gray-200">{source}</span>}
@@ -214,36 +237,84 @@ const ContractScreen: React.FC<ContractScreenProps> = ({ orderDetails, setView, 
           <p className="mt-1 text-sm leading-relaxed text-primary-dark">{t('contractReadonlyNoticeBody')}</p>
         </section>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+        <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-5">
+          <h2 className="text-base font-bold text-gray-900">{t('contractReviewBeforeSigning')}</h2>
+
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{t('reservationDetailsTitle')}</h2>
-            <p className="mt-1 text-sm text-gray-500">{t('contractReservationReadonlyHint')}</p>
+            <div className="border-b border-gray-200 pb-2">
+              <h3 className="text-lg font-bold text-gray-900">{t('reservationDetailsTitle')}</h3>
+              <p className="mt-1 text-sm text-gray-500">{t('contractReservationReadonlyHint')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4">
+              {renderReadonlyField(t('orderNumber'), orderDetails.orderNumber, t('contractSourceReservation'))}
+              {renderReadonlyField(t('confirmationNumber'), orderDetails.confirmationCode, t('contractSourceReservation'))}
+              {renderReadonlyField(t('carModel'), orderDetails.vehicle.name, t('contractSourceReservation'))}
+              {renderReadonlyField(t('driverName'), orderDetails.customer.name, t('contractSourceReservation'))}
+              {renderReadonlyField(t('pickupTime'), orderDetails.rentalPeriod.start, t('contractSourceReservation'))}
+              {renderReadonlyField(t('pickupLocation'), orderDetails.pickupLocation, t('contractSourceReservation'))}
+              {renderReadonlyField(t('returnTime'), orderDetails.rentalPeriod.end, t('contractSourceReservation'))}
+              {renderReadonlyField(t('returnLocation'), orderDetails.returnLocation, t('contractSourceReservation'))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {renderReadonlyField(t('orderNumber'), orderDetails.orderNumber, t('contractSourceReservation'))}
-            {renderReadonlyField(t('confirmationNumber'), orderDetails.confirmationCode, t('contractSourceReservation'))}
-            {renderReadonlyField(t('carModel'), orderDetails.vehicle.name, t('contractSourceReservation'))}
-            {renderReadonlyField(t('driverName'), orderDetails.customer.name, t('contractSourceReservation'))}
-            {renderReadonlyField(t('pickupTime'), orderDetails.rentalPeriod.start, t('contractSourceReservation'))}
-            {renderReadonlyField(t('pickupLocation'), orderDetails.pickupLocation, t('contractSourceReservation'))}
-            {renderReadonlyField(t('returnTime'), orderDetails.rentalPeriod.end, t('contractSourceReservation'))}
-            {renderReadonlyField(t('returnLocation'), orderDetails.returnLocation, t('contractSourceReservation'))}
+
+          <div className="border-t border-gray-200 pt-4">
+            <div className="border-b border-gray-200 pb-2">
+              <h3 className="text-lg font-bold text-gray-900">{t('contractDriverIdentification')}</h3>
+              <p className="mt-1 text-sm text-gray-500">{t('contractDriverIdentificationIntro')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4">
+              {renderReadonlyField(t('contractFirstName'), driverProfile.firstName, t('contractSourceReservation'))}
+              {renderReadonlyField(t('contractLastName'), driverProfile.lastName, t('contractSourceReservation'))}
+              {renderReadonlyField(t('contractResidencyStatus'), driverProfile.residencyStatus === 'international' ? t('contractResidencyInternational') : t('contractResidencyLocal'), t('contractSourceOnlineCheckin'))}
+              {renderReadonlyField(t('contactPhone'), driverProfile.phone, t('contractSourceReservation'))}
+              {renderReadonlyField(t('emailLabel'), driverProfile.email, t('contractSourceReservation'))}
+              {renderReadonlyField(t('contractAdditionalDriverCount'), t('contractAdditionalDriverNone'), t('contractSourceReservation'))}
+            </div>
           </div>
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{t('contractDriverIdentification')}</h2>
-            <p className="mt-1 text-sm text-gray-500">{t('contractDriverIdentificationIntro')}</p>
+            <h2 className="text-base font-bold text-gray-900">{t('contractPickupAddonsTitle')}</h2>
+            <p className="mt-1 text-sm text-gray-500">{t('contractPickupAddonsHint')}</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {renderReadonlyField(t('contractFirstName'), driverProfile.firstName, t('contractSourceReservation'))}
-            {renderReadonlyField(t('contractLastName'), driverProfile.lastName, t('contractSourceReservation'))}
-            {renderReadonlyField(t('contractResidencyStatus'), driverProfile.residencyStatus === 'international' ? t('contractResidencyInternational') : t('contractResidencyLocal'), t('contractSourceOnlineCheckin'))}
-            {renderReadonlyField(t('contactPhone'), driverProfile.phone, t('contractSourceReservation'))}
-            {renderReadonlyField(t('emailLabel'), driverProfile.email, t('contractSourceReservation'))}
-            {renderReadonlyField(t('contractAdditionalDriverCount'), t('contractAdditionalDriverNone'), t('contractSourceReservation'))}
-          </div>
+          {orderDetails.pickup_addons_snapshot ? (
+            <div className="space-y-4">
+              {[
+                {
+                  key: 'online_booking',
+                  title: t('contractOnlineAddonsLabel'),
+                  items: orderDetails.pickup_addons_snapshot.online_booking
+                },
+                {
+                  key: 'store_addons',
+                  title: t('contractStoreAddonsLabel'),
+                  items: orderDetails.pickup_addons_snapshot.store_addons
+                }
+              ].map((group) => (
+                <div key={group.key}>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">{group.title}</h3>
+                  {group.items.length > 0 ? (
+                    <div className="mt-2 divide-y divide-gray-100 rounded-lg border border-gray-100">
+                      {group.items.map((item) => (
+                        <div key={item.code} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-semibold text-gray-900">{item.name}</p>
+                            <p className="mt-0.5 text-xs text-gray-500">x{item.quantity}</p>
+                          </div>
+                          <span className="shrink-0 text-sm font-semibold text-gray-900">{formatAddonAmount(item)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm italic text-gray-500">{t('contractNoAddons')}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-red-600">{t('contractPickupRequired')}</p>
+          )}
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
@@ -312,7 +383,7 @@ const ContractScreen: React.FC<ContractScreenProps> = ({ orderDetails, setView, 
               className="mt-1 h-4 w-4 rounded border-gray-300 text-primary"
             />
             <span className="ml-3 text-sm text-gray-600">
-              <span dangerouslySetInnerHTML={{ __html: t('contractAgreement') }} />
+              {t('contractAgreement')}
             </span>
           </label>
         </section>
@@ -329,9 +400,10 @@ const ContractScreen: React.FC<ContractScreenProps> = ({ orderDetails, setView, 
         <button
           type="button"
           onClick={handleSubmit}
-          className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-white transition-colors hover:bg-primary-dark"
+          disabled={isSubmitting}
+          className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {t('contractSubmit')}
+          {isSubmitting ? t('contractSigning') : t('contractSubmit')}
         </button>
       </div>
 
