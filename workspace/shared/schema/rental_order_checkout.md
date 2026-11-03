@@ -1,0 +1,42 @@
+/******************************************/
+rental_order_checkout
+/******************************************/
+CREATE TABLE `rental_order_checkout` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键id',
+  `active` bit(1) DEFAULT b'1' COMMENT 'active',
+  `deleted` bit(1) DEFAULT b'0' COMMENT 'deleted',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `creator_id` bigint unsigned NOT NULL DEFAULT '0' COMMENT '创建人id',
+  `updater_id` bigint unsigned NOT NULL DEFAULT '0' COMMENT '更新人id',
+  `order_id` bigint unsigned NOT NULL COMMENT '订单id',
+  `store_id` bigint unsigned DEFAULT NULL COMMENT '门店id',
+  `vendor_id` bigint unsigned DEFAULT NULL COMMENT '供应商id',
+  `actual_vehicle_id` bigint unsigned DEFAULT NULL COMMENT '实际还车车辆id',
+  `actual_stock_id` bigint unsigned DEFAULT NULL COMMENT '实际还车车辆库存id',
+  `tank_capacity` int unsigned DEFAULT NULL COMMENT '当前油量，单位公升',
+  `mileage` int unsigned DEFAULT NULL COMMENT '当前里程数，单位km',
+  `over_mileage_amount` decimal(10,2) DEFAULT NULL COMMENT '超里程费用',
+  `checkout_time` datetime DEFAULT NULL COMMENT '还车时间',
+  `confirm_time` datetime DEFAULT NULL COMMENT '确认还车时间',
+  `confirmer_id` bigint unsigned DEFAULT NULL COMMENT '确认人id',
+  `front_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆前部照片',
+  `back_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆后部照片',
+  `right_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆右侧照片',
+  `left_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆左侧照片',
+  `etc_imgs` varchar(500) DEFAULT NULL COMMENT 'ETC等相关照片',
+  `fule_imgs` varchar(500) DEFAULT NULL COMMENT '油量表照片',
+  `light_imgs` varchar(500) DEFAULT NULL COMMENT '车灯状况照片',
+  `vehicle_inspection_imgs` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆检测照片',
+  `vehicle_damage_imgs` text COMMENT '车辆损伤照片',
+  `vehicle_damage_desc` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆损伤描述',
+  `fuel_cost` decimal(10,2) DEFAULT NULL COMMENT '燃油费',
+  `around_img_url` varchar(500) DEFAULT NULL COMMENT '车辆全景照片',
+  `park_img_url` varchar(500) DEFAULT NULL COMMENT '车位号照片',
+  `location_coordinate` varchar(500) DEFAULT NULL COMMENT '还车经纬度',
+  `location_name` varchar(500) DEFAULT NULL COMMENT '还车位置',
+  `location_description` varchar(500) DEFAULT NULL COMMENT '还车位置说明',
+  PRIMARY KEY (`id`),
+  KEY `idx_update_time` (`update_time`)
+) ENGINE=InnoDB AUTO_INCREMENT=1370 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='还车登记表'
+;

@@ -1,0 +1,5 @@
+﻿# Customer Architecture
+
+放置 customer 端的架构与范围说明。
+
+- `repository-extraction.md`：客户端独立仓库拆分来源、边界与验证说明。

@@ -1,0 +1,47 @@
+
+/******************************************/
+rental_order_checkin
+/******************************************/
+CREATE TABLE `rental_order_checkin` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键id',
+  `active` bit(1) DEFAULT b'1' COMMENT 'active',
+  `deleted` bit(1) DEFAULT b'0' COMMENT 'deleted',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `creator_id` bigint unsigned NOT NULL DEFAULT '0' COMMENT '创建人id',
+  `updater_id` bigint unsigned NOT NULL DEFAULT '0' COMMENT '更新人id',
+  `order_id` bigint unsigned NOT NULL COMMENT '订单id',
+  `store_id` bigint unsigned DEFAULT NULL COMMENT '门店id',
+  `vendor_id` bigint unsigned DEFAULT NULL COMMENT '供应商id',
+  `actual_vehicle_id` bigint unsigned DEFAULT NULL COMMENT '实际车辆id',
+  `actual_stock_id` bigint unsigned DEFAULT NULL COMMENT '实际车辆库存id',
+  `tank_capacity` int unsigned DEFAULT NULL COMMENT '当前油量，单位公升',
+  `tank_capacity_numerator` int DEFAULT NULL COMMENT '油箱容量-分子',
+  `tank_capacity_denominator` int DEFAULT NULL COMMENT '油箱容量-分母',
+  `mileage` int unsigned DEFAULT NULL COMMENT '当前里程数，单位km',
+  `front_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆前部照片',
+  `back_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆后部照片',
+  `right_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆右侧照片',
+  `left_img` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆左侧照片',
+  `etc_imgs` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT 'ETC等相关照片',
+  `fule_imgs` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '油量表照片',
+  `light_imgs` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车灯状况照片',
+  `vehicle_inspection_imgs` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '车辆检测照片',
+  `vehicle_damage_imgs` text COMMENT '车辆损伤照片',
+  `vehicle_damage_desc` text COMMENT '车辆损伤描述',
+  `deposit_amount` decimal(10,2) DEFAULT NULL COMMENT '押金金额',
+  `pre_authorised_card` varchar(30) DEFAULT NULL COMMENT '预授权/信用卡',
+  `authorised_expiration` date DEFAULT NULL COMMENT '授权有效期',
+  `checkin_time` datetime DEFAULT NULL COMMENT '取车时间',
+  `confirm_time` datetime DEFAULT NULL COMMENT '确认取车时间',
+  `confirmer_id` bigint unsigned DEFAULT NULL COMMENT '确认人id',
+  `verification_status` tinyint unsigned DEFAULT '0' COMMENT '身份核验状态：0-待核验，1-通过，2-驳回',
+  `verification_time` datetime DEFAULT NULL COMMENT '核验时间',
+  `verifier_id` bigint unsigned DEFAULT NULL COMMENT '核验人id',
+  `verification_method` tinyint unsigned DEFAULT NULL COMMENT '核验方式：1-人工，2-系统',
+  `verification_note` varchar(200) DEFAULT NULL COMMENT '核验备注',
+  `license_plate_photo` varchar(500) DEFAULT NULL COMMENT '证件/车的校验照片',
+  PRIMARY KEY (`id`),
+  KEY `idx_update_time` (`update_time`)
+) ENGINE=InnoDB AUTO_INCREMENT=1617 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='取车登记表'
+;

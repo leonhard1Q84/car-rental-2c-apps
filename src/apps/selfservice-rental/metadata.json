@@ -1,0 +1,8 @@
+{
+  "name": "自助取还H5",
+  "description": "A web application for customers to perform self-service vehicle inspection and sign the rental agreement before picking up their car. It includes features for authentication, pickup guidance, vehicle condition reporting, and electronic contract signing.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

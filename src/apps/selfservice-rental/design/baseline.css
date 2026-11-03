@@ -1,0 +1,7 @@
+:root[data-app='selfservice-rental'] {
+  color-scheme: light;
+}
+
+:root[data-app='selfservice-rental'] * {
+  box-sizing: border-box;
+}
