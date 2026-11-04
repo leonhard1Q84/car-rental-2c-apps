@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'vite';
 
-const helperPath = '/src/apps/selfservice-rental/components/rentalContractConfirmation.ts';
+const helperPath = '/src/components/rentalContractConfirmation.ts';
 const componentPath = new URL(
-  '../src/apps/selfservice-rental/components/RentalTermsConfirmationSection.tsx',
+  '../src/components/RentalTermsConfirmationSection.tsx',
   import.meta.url
 );
 
@@ -12,7 +12,7 @@ const server = await createServer({
   appType: 'custom',
   optimizeDeps: { noDiscovery: true, include: [], entries: [] },
   logLevel: 'error',
-  server: { middlewareMode: true }
+  server: { middlewareMode: true, hmr: false, ws: false }
 });
 
 try {
@@ -23,9 +23,9 @@ try {
     resolveRentalMaterialConfiguration,
     updateRentalMaterialConfirmation
   } = await server.ssrLoadModule(helperPath);
-  const { translations } = await server.ssrLoadModule('/src/apps/selfservice-rental/translations.ts');
+  const { translations } = await server.ssrLoadModule('/src/translations.ts');
   const { isInspectionReadyForContract } = await server.ssrLoadModule(
-    '/src/apps/selfservice-rental/components/inspectionContractEntry.ts'
+    '/src/components/inspectionContractEntry.ts'
   );
   const readyRecord = {
     verificationStatus: 'approved',
@@ -61,7 +61,7 @@ try {
     ...readyRecord, vehicleMetricCheckpoint: { finalMetrics: { mileageKm: 0, energyPercent: 0 } },
   }), true, 'valid zero readings must remain accepted');
   const inspectionSource = await readFile(new URL(
-    '../src/apps/selfservice-rental/components/InspectionScreen.tsx', import.meta.url
+    '../src/components/InspectionScreen.tsx', import.meta.url
   ), 'utf8');
   assert.doesNotMatch(inspectionSource, /RentalTermsConfirmationSection|hasCompletedRentalMaterialConfirmations/);
   assert.match(inspectionSource, /contractConfirmationRecord = initialRecord\?\.contractConfirmationRecord/,

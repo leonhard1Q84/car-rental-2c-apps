@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-const server = await createServer({ appType: 'custom', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, logLevel: 'error', server: { middlewareMode: true } });
+const server = await createServer({ appType: 'custom', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } });
 const original = { indexedDB: globalThis.indexedDB, window: globalThis.window, BroadcastChannel: globalThis.BroadcastChannel };
 const records = new Map(), legacy = new Map();
 // Transactional test adapter stages writes until completion and discards aborted writes.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 
-const server = await createServer({ appType: 'custom', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, logLevel: 'error', server: { middlewareMode: true } });
+const server = await createServer({ appType: 'custom', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } });
 const originalIndexedDB = globalThis.indexedDB;
 const records = new Map();
 let failWrite = false;
@@ -47,14 +47,14 @@ globalThis.indexedDB = {
 };
 
 try {
-  const { InspectionCaptureSession, assertCaptureRecord, captureKey, MAX_CAPTURE_BYTES } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/capture.ts');
-  const { captureRepository } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/captureStorage.ts');
-  const { InspectionCaptureControls } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/InspectionCaptureSection.tsx');
-  const { LanguageProvider } = await server.ssrLoadModule('/src/apps/selfservice-rental/contexts/LanguageContext.tsx');
-  const { preparationTranslations } = await server.ssrLoadModule('/src/apps/selfservice-rental/i18n/preparation.ts');
+  const { InspectionCaptureSession, assertCaptureRecord, captureKey, MAX_CAPTURE_BYTES } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/capture.ts');
+  const { captureRepository } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/captureStorage.ts');
+  const { InspectionCaptureControls } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/InspectionCaptureSection.tsx');
+  const { LanguageProvider } = await server.ssrLoadModule('/src/contexts/LanguageContext.tsx');
+  const { preparationTranslations } = await server.ssrLoadModule('/src/i18n/preparation.ts');
   const React = (await import('react')).default;
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const binding = { orderId: 'PREP01', vehicleId: 'vehicle-1', revision: 'revision-1' };
+  const binding = { orderId: 'RC10001', vehicleId: 'vehicle-1', revision: 'revision-1' };
   const image = new Blob(['photo'], { type: 'image/jpeg' });
   const session = new InspectionCaptureSession(binding, captureRepository);
   await session.load();
@@ -118,7 +118,7 @@ try {
   await stale.retry();
   assert.deepEqual(stale.getSnapshot().record, confirmed.record);
 
-  for (const alternative of [{ ...binding, orderId: 'PREP02' }, { ...binding, vehicleId: 'vehicle-2' }, { ...binding, revision: 'revision-2' }]) {
+  for (const alternative of [{ ...binding, orderId: 'RC10002' }, { ...binding, vehicleId: 'vehicle-2' }, { ...binding, revision: 'revision-2' }]) {
     assert.notEqual(captureKey(alternative), captureKey(binding));
     const empty = new InspectionCaptureSession(alternative, captureRepository);
     await empty.load();
@@ -126,7 +126,7 @@ try {
     assert.equal(empty.getSnapshot().record.confirmation, undefined);
     assert.throws(() => assertCaptureRecord(confirmed.record, alternative), /INVALID_CAPTURE_RECORD/);
   }
-  const noPhotos = new InspectionCaptureSession({ ...binding, orderId: 'PREP02' }, captureRepository);
+  const noPhotos = new InspectionCaptureSession({ ...binding, orderId: 'RC10002' }, captureRepository);
   await noPhotos.load();
   const firstConfirmation = noPhotos.confirm('en', preparationTranslations.en.prepCaptureStatement);
   const duplicate = noPhotos.confirm('ja', 'Duplicate');
@@ -137,12 +137,12 @@ try {
   assert.equal(noPhotos.getSnapshot().record.confirmation.language, 'en');
   assert.equal(noPhotos.getSnapshot().record.sequence, 1, 'zero-photo confirmation is explicit and idempotent');
 
-  const removable = new InspectionCaptureSession({ ...binding, orderId: 'PREP03' }, captureRepository);
+  const removable = new InspectionCaptureSession({ ...binding, orderId: 'RC10003' }, captureRepository);
   await removable.load();
   await removable.add([image, image]);
   const keptId = removable.getSnapshot().record.photos[1].id;
   await removable.remove(removable.getSnapshot().record.photos[0].id);
-  assert.deepEqual((await captureRepository.load({ ...binding, orderId: 'PREP03' })).photos.map(photo => photo.id), [keptId]);
+  assert.deepEqual((await captureRepository.load({ ...binding, orderId: 'RC10003' })).photos.map(photo => photo.id), [keptId]);
   failRead = true;
   const failedLoad = new InspectionCaptureSession(binding, captureRepository);
   await failedLoad.load();
@@ -153,8 +153,8 @@ try {
   await failedLoad.retry();
   assert.deepEqual(failedLoad.getSnapshot().record, confirmed.record);
 
-  const { loadPublishedInspection } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/fixtures.ts');
-  for (const orderId of ['PREP02']) {
+  const { loadPublishedInspection } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/fixtures.ts');
+  for (const orderId of ['RC10002']) {
     const snapshot = await loadPublishedInspection(orderId);
     const oldBinding = { ...snapshot, revision: 'DEMO-1' };
     const historical = new InspectionCaptureSession(oldBinding, captureRepository);
@@ -162,66 +162,66 @@ try {
     await historical.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
     const current = new InspectionCaptureSession(snapshot, captureRepository);
     await current.load();
-    assert.equal(current.getSnapshot().record.confirmation, undefined, 'PREP02 new version permits adding photos');
-    assert.ok((await captureRepository.load(oldBinding)).confirmation, 'historical PREP02 confirmation is retained');
+    assert.equal(current.getSnapshot().record.confirmation, undefined, 'RC10002 new version permits adding photos');
+    assert.ok((await captureRepository.load(oldBinding)).confirmation, 'historical RC10002 confirmation is retained');
     await current.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
     const refreshed = new InspectionCaptureSession(snapshot, captureRepository);
     await refreshed.load();
-    assert.ok(refreshed.getSnapshot().record.confirmation, 'new PREP02 confirmation survives refresh');
+    assert.ok(refreshed.getSnapshot().record.confirmation, 'new RC10002 confirmation survives refresh');
   }
-  const prep04 = await loadPublishedInspection('PREP04');
-  const oldPrep04 = new InspectionCaptureSession({ ...prep04, revision: 'DEMO-1' }, captureRepository);
-  await oldPrep04.load();
-  await oldPrep04.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
-  const newPrep04 = new InspectionCaptureSession(prep04, captureRepository);
-  await newPrep04.load();
-  assert.equal(newPrep04.getSnapshot().record.confirmation, undefined, 'new PREP04 version starts with photo controls despite old confirmation');
-  assert.ok((await captureRepository.load({ ...prep04, revision: 'DEMO-1' })).confirmation, 'old PREP04 confirmation remains stored');
-  await newPrep04.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
-  const reloadedPrep04 = new InspectionCaptureSession(prep04, captureRepository);
-  await reloadedPrep04.load();
-  assert.ok(reloadedPrep04.getSnapshot().record.confirmation, 'new confirmation survives reload without recurring resets');
+  const RC10004 = await loadPublishedInspection('RC10004');
+  const oldRC10004 = new InspectionCaptureSession({ ...RC10004, revision: 'DEMO-1' }, captureRepository);
+  await oldRC10004.load();
+  await oldRC10004.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
+  const newRC10004 = new InspectionCaptureSession(RC10004, captureRepository);
+  await newRC10004.load();
+  assert.equal(newRC10004.getSnapshot().record.confirmation, undefined, 'new RC10004 version starts with photo controls despite old confirmation');
+  assert.ok((await captureRepository.load({ ...RC10004, revision: 'DEMO-1' })).confirmation, 'old RC10004 confirmation remains stored');
+  await newRC10004.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
+  const reloadedRC10004 = new InspectionCaptureSession(RC10004, captureRepository);
+  await reloadedRC10004.load();
+  assert.ok(reloadedRC10004.getSnapshot().record.confirmation, 'new confirmation survives reload without recurring resets');
 
-  const { loadInspectionReview, inspectionReviewPresentation, assertCurrentInspection } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/reviewStatus.ts');
-  const { loadSigningInspectionConfirmed } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/signingEligibility.ts');
-  const { InspectionIssueDialog, InspectionIssueDialogContent, inspectionContactHref } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/InspectionIssueDialog.tsx');
-  const { InspectionConfirmDialog, InspectionConfirmDialogContent } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/InspectionConfirmDialog.tsx');
-  const untouched = await loadInspectionReview('PREP01');
-  const prep01OldBinding = { ...untouched.snapshot, revision: 'DEMO-1' };
-  const prep01Historical = new InspectionCaptureSession(prep01OldBinding, captureRepository);
-  await prep01Historical.load();
-  await prep01Historical.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
-  assert.equal(inspectionReviewPresentation(await loadInspectionReview('PREP01')).status, 'prepInspectionAwaitingReview', 'old PREP01 confirmation does not complete the new prepared example');
-  assert.ok((await captureRepository.load(prep01OldBinding)).confirmation, 'PREP01 historical confirmation is retained');
+  const { loadInspectionReview, inspectionReviewPresentation, assertCurrentInspection } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/reviewStatus.ts');
+  const { loadSigningInspectionConfirmed } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/signingEligibility.ts');
+  const { InspectionIssueDialog, InspectionIssueDialogContent, inspectionContactHref } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/InspectionIssueDialog.tsx');
+  const { InspectionConfirmDialog, InspectionConfirmDialogContent } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/InspectionConfirmDialog.tsx');
+  const untouched = await loadInspectionReview('RC10001');
+  const RC10001OldBinding = { ...untouched.snapshot, revision: 'DEMO-1' };
+  const RC10001Historical = new InspectionCaptureSession(RC10001OldBinding, captureRepository);
+  await RC10001Historical.load();
+  await RC10001Historical.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
+  assert.equal(inspectionReviewPresentation(await loadInspectionReview('RC10001')).status, 'prepInspectionAwaitingReview', 'old RC10001 confirmation does not complete the new prepared example');
+  assert.ok((await captureRepository.load(RC10001OldBinding)).confirmation, 'RC10001 historical confirmation is retained');
   assert.equal(inspectionReviewPresentation(untouched).status, 'prepInspectionAwaitingReview');
-  assert.equal((await loadInspectionReview('PREP03')).status, 'empty');
-  assert.equal(inspectionReviewPresentation({ status: 'error', orderId: 'PREP01' }).action, 'prepRetry');
-  assert.equal(inspectionReviewPresentation({ status: 'loading', orderId: 'PREP01' }).status, 'prepLoading');
-  assert.equal(inspectionReviewPresentation({ status: 'empty', orderId: 'PREP03' }).status, 'prepInspectionPending');
-  const completeReview = await loadInspectionReview('PREP04');
+  assert.equal((await loadInspectionReview('RC10003')).status, 'empty');
+  assert.equal(inspectionReviewPresentation({ status: 'error', orderId: 'RC10001' }).action, 'prepRetry');
+  assert.equal(inspectionReviewPresentation({ status: 'loading', orderId: 'RC10001' }).status, 'prepLoading');
+  assert.equal(inspectionReviewPresentation({ status: 'empty', orderId: 'RC10003' }).status, 'prepInspectionPending');
+  const completeReview = await loadInspectionReview('RC10004');
   assert.equal(inspectionReviewPresentation(completeReview).status, 'prepCaptureConfirmed');
-  assert.equal(await loadSigningInspectionConfirmed('PREP04'), true);
+  assert.equal(await loadSigningInspectionConfirmed('RC10004'), true);
   failRead = true;
-  await assert.rejects(loadInspectionReview('PREP04'), 'failed reads cannot be presented as completed or awaiting store preparation');
+  await assert.rejects(loadInspectionReview('RC10004'), 'failed reads cannot be presented as completed or awaiting store preparation');
   failRead = false;
   const originalWindow = globalThis.window;
   const published = new Map();
   globalThis.window = { localStorage: { getItem: key => published.get(key) ?? null } };
   try {
-    const key = 'ix-rental:customer-inspection:PREP03';
-    const source = await loadPublishedInspection('PREP01');
-    const publication = { ...source, orderId: 'PREP03', source: 'STORE_OPS', revision: 'PHOTO-REVIEW-1' };
+    const key = 'ix-rental:customer-inspection:RC10003';
+    const source = await loadPublishedInspection('RC10001');
+    const publication = { ...source, orderId: 'RC10003', source: 'STORE_OPS', revision: 'PHOTO-REVIEW-1' };
     published.set(key, JSON.stringify(publication));
     const current = new InspectionCaptureSession(publication, captureRepository, assertCurrentInspection);
     await current.load();
-    assert.equal(inspectionReviewPresentation(await loadInspectionReview('PREP03')).status, 'prepInspectionAwaitingReview');
+    assert.equal(inspectionReviewPresentation(await loadInspectionReview('RC10003')).status, 'prepInspectionAwaitingReview');
     await current.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
-    assert.equal(inspectionReviewPresentation(await loadInspectionReview('PREP03')).status, 'prepCaptureConfirmed');
-    assert.equal(await loadSigningInspectionConfirmed('PREP03'), true, 'home and signing use the identical confirmation');
+    assert.equal(inspectionReviewPresentation(await loadInspectionReview('RC10003')).status, 'prepCaptureConfirmed');
+    assert.equal(await loadSigningInspectionConfirmed('RC10003'), true, 'home and signing use the identical confirmation');
     const updated = { ...publication, revision: 'PHOTO-REVIEW-2' };
     published.set(key, JSON.stringify(updated));
-    assert.equal(inspectionReviewPresentation(await loadInspectionReview('PREP03')).status, 'prepInspectionAwaitingReview');
-    assert.equal(await loadSigningInspectionConfirmed('PREP03'), false, 'new publication does not inherit a previous confirmation');
+    assert.equal(inspectionReviewPresentation(await loadInspectionReview('RC10003')).status, 'prepInspectionAwaitingReview');
+    assert.equal(await loadSigningInspectionConfirmed('RC10003'), false, 'new publication does not inherit a previous confirmation');
     assert.ok((await captureRepository.load(publication)).confirmation, 'historical confirmation is retained');
     const pending = new InspectionCaptureSession(updated, captureRepository, assertCurrentInspection);
     await pending.load();
@@ -233,9 +233,9 @@ try {
     // Automatic photo sync advances the photo revision without changing the review scope.
     const autoUpdated = { ...publication, revision: 'AUTO-PHOTO-4', reviewRevision: publication.revision, readyToConfirm: false, missingFields: ['light'] };
     published.set(key, JSON.stringify(autoUpdated));
-    const retained = await loadInspectionReview('PREP03');
+    const retained = await loadInspectionReview('RC10003');
     assert.equal(retained.confirmation.at, current.getSnapshot().record.confirmation.at);
-    assert.equal(await loadSigningInspectionConfirmed('PREP03'), true, 'later incomplete photo changes do not revoke an existing confirmation');
+    assert.equal(await loadSigningInspectionConfirmed('RC10003'), true, 'later incomplete photo changes do not revoke an existing confirmation');
     const stableBinding = { orderId: autoUpdated.orderId, vehicleId: autoUpdated.vehicleId, revision: autoUpdated.reviewRevision, photoRevision: autoUpdated.revision };
     await assert.rejects(assertCurrentInspection(stableBinding), /OUTDATED/, 'first confirmation still requires complete records');
     await assertCurrentInspection(stableBinding, true);
@@ -245,16 +245,16 @@ try {
     assert.equal(reopened.getSnapshot().record.confirmation.photoRevision, publication.revision, 'confirmation evidence keeps the actual original photo revision');
     const wrongVehicle = { ...updated, vehicleId: 'OTHER', vehicle: { ...updated.vehicle, id: 'OTHER' } };
     published.set(key, JSON.stringify(wrongVehicle));
-    await assert.rejects(loadInspectionReview('PREP03'), /OWNERSHIP/, 'foreign vehicle photos are rejected');
-    for (const bad of ['{broken', JSON.stringify({ ...publication, orderId: 'PREP02' }), JSON.stringify({ ...publication, revision: '' }), JSON.stringify({ ...publication, source: 'DEMO' })]) {
+    await assert.rejects(loadInspectionReview('RC10003'), /OWNERSHIP/, 'foreign vehicle photos are rejected');
+    for (const bad of ['{broken', JSON.stringify({ ...publication, orderId: 'RC10002' }), JSON.stringify({ ...publication, revision: '' }), JSON.stringify({ ...publication, source: 'DEMO' })]) {
       published.set(key, bad);
-      await assert.rejects(loadInspectionReview('PREP03'), 'invalid records are errors rather than available materials or empty state');
+      await assert.rejects(loadInspectionReview('RC10003'), 'invalid records are errors rather than available materials or empty state');
     }
   } finally { globalThis.window = originalWindow; }
   assert.equal(inspectionContactHref('+81 50 0000 0000'), 'tel:+815000000000');
   for (const phone of [undefined, '', 'javascript:alert(1)', 'call store', '123']) assert.equal(inspectionContactHref(phone), undefined);
 
-  const { newDraft } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/model.ts');
+  const { newDraft } = await server.ssrLoadModule('/src/app/customer-journey/model.ts');
   const callbacks = { onConfirm() {}, onRetry() {}, onBack() {} };
   for (const [language, copy] of Object.entries(preparationTranslations)) {
     const render = state => renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(InspectionCaptureControls, { state, ...callbacks })));
@@ -262,10 +262,10 @@ try {
     const reviewIntro = draftMarkup.split('<footer')[0];
     assert.match(reviewIntro, /data-inspection-review/);
     assert.match(reviewIntro, /data-inspection-review-hint/);
-    assert.ok(reviewIntro.includes('border-l-2 border-primary/40'));
+    assert.ok(reviewIntro.includes('border-l-2 border-customer-brand/40'));
     assert.match(reviewIntro, /lucide-info/);
-    assert.match(reviewIntro, /font-medium leading-6 text-gray-700/);
-    assert.doesNotMatch(reviewIntro, /padding-bottom|rounded-xl|shadow-sm|bg-white|border-gray-200/);
+    assert.match(reviewIntro, /text-customer-body-strong text-customer-text-secondary/);
+    assert.doesNotMatch(reviewIntro, /padding-bottom|rounded-xl|shadow-sm|bg-white|border-gray-200|rounded-customer-card|shadow-customer-card|bg-customer-card|border-customer-border\b/);
     assert.ok(draftMarkup.includes(copy.prepInspectionReviewHint));
     assert.ok(!draftMarkup.includes(copy.prepCaptureAdd));
     assert.ok(draftMarkup.includes(copy.prepInspectionIssue));
@@ -306,11 +306,11 @@ try {
     assert.match(failedMarkup, /role="alert"/);
     assert.ok(failedMarkup.includes(copy.prepInspectionReviewSaveError));
   }
-  const prep01New = new InspectionCaptureSession(untouched.snapshot, captureRepository, assertCurrentInspection);
-  await prep01New.load();
-  assert.equal(prep01New.getSnapshot().record.confirmation, undefined);
-  await prep01New.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
-  assert.equal(inspectionReviewPresentation(await loadInspectionReview('PREP01')).status, 'prepCaptureConfirmed', 'new demo confirmation survives reopening without repeated resets');
+  const RC10001New = new InspectionCaptureSession(untouched.snapshot, captureRepository, assertCurrentInspection);
+  await RC10001New.load();
+  assert.equal(RC10001New.getSnapshot().record.confirmation, undefined);
+  await RC10001New.confirm('zh-CN', preparationTranslations['zh-CN'].prepCaptureStatement);
+  assert.equal(inspectionReviewPresentation(await loadInspectionReview('RC10001')).status, 'prepCaptureConfirmed', 'new demo confirmation survives reopening without repeated resets');
   console.log('Customer photo review: actual confirmation transactions, preserved historical photos, failure/retry, duplicate clicks, stale publication rejection, home/signing consistency, invalid publications, version isolation, no upload controls and six-language dialog rendering passed.');
 } finally {
   globalThis.indexedDB = originalIndexedDB;

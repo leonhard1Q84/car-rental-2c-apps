@@ -1,0 +1,137 @@
+:root[data-app='selfservice-rental'] {
+  /* §4.1 Primitive palette — only referenced by semantic tokens below */
+  --customer-color-orange-50: #fff7ed;
+  --customer-color-orange-100: #ffedd5;
+  --customer-color-orange-200: #fed7aa;
+  --customer-color-orange-500: #ff5a00;
+  --customer-color-orange-600: #e64b00;
+  --customer-color-orange-700: #c2410c;
+  --customer-color-slate-50: #f8fafc;
+  --customer-color-slate-100: #f1f5f9;
+  --customer-color-slate-200: #e2e8f0;
+  --customer-color-slate-300: #cbd5e1;
+  --customer-color-slate-400: #94a3b8;
+  --customer-color-slate-500: #64748b;
+  --customer-color-slate-600: #475569;
+  --customer-color-slate-700: #334155;
+  --customer-color-slate-900: #0f172a;
+  --customer-color-blue-50: #eff6ff;
+  --customer-color-blue-200: #bfdbfe;
+  --customer-color-blue-600: #2563eb;
+  --customer-color-blue-700: #1d4ed8;
+  --customer-color-emerald-50: #ecfdf5;
+  --customer-color-emerald-200: #a7f3d0;
+  --customer-color-emerald-600: #059669;
+  --customer-color-emerald-700: #047857;
+  --customer-color-amber-50: #fffbeb;
+  --customer-color-amber-200: #fde68a;
+  --customer-color-amber-600: #d97706;
+  --customer-color-amber-700: #b45309;
+  --customer-color-rose-50: #fff1f2;
+  --customer-color-rose-200: #fecdd3;
+  --customer-color-rose-600: #e11d48;
+  --customer-color-rose-700: #be123c;
+
+  /* §4.2 Semantic colors */
+  --customer-color-brand: var(--customer-color-orange-500);
+  --customer-color-brand-hover: var(--customer-color-orange-600);
+  --customer-color-brand-pressed: var(--customer-color-orange-700);
+  --customer-color-brand-text: var(--customer-color-orange-700);
+  --customer-color-brand-subtle: var(--customer-color-orange-50);
+  --customer-color-brand-border: var(--customer-color-orange-200);
+  --customer-color-brand-ring: var(--customer-color-orange-100);
+  --customer-color-page: var(--customer-color-slate-100);
+  --customer-color-card: #ffffff;
+  --customer-color-inset: var(--customer-color-slate-50);
+  --customer-color-fill-disabled: var(--customer-color-slate-200);
+  --customer-color-text: var(--customer-color-slate-900);
+  --customer-color-text-secondary: var(--customer-color-slate-600);
+  --customer-color-text-tertiary: var(--customer-color-slate-500);
+  --customer-color-text-disabled: var(--customer-color-slate-400);
+  --customer-color-text-inverse: #ffffff;
+  --customer-color-border: var(--customer-color-slate-200);
+  --customer-color-border-strong: var(--customer-color-slate-300);
+  --customer-color-border-subtle: var(--customer-color-slate-100);
+  --customer-color-scrim: rgba(15, 23, 42, 0.45);
+
+  /* §4.3 Status tones: solid / text / subtle / border */
+  --customer-color-info: var(--customer-color-blue-600);
+  --customer-color-info-text: var(--customer-color-blue-700);
+  --customer-color-info-subtle: var(--customer-color-blue-50);
+  --customer-color-info-border: var(--customer-color-blue-200);
+  --customer-color-success: var(--customer-color-emerald-600);
+  --customer-color-success-text: var(--customer-color-emerald-700);
+  --customer-color-success-subtle: var(--customer-color-emerald-50);
+  --customer-color-success-border: var(--customer-color-emerald-200);
+  --customer-color-warning: var(--customer-color-amber-600);
+  --customer-color-warning-text: var(--customer-color-amber-700);
+  --customer-color-warning-subtle: var(--customer-color-amber-50);
+  --customer-color-warning-border: var(--customer-color-amber-200);
+  --customer-color-danger: var(--customer-color-rose-600);
+  --customer-color-danger-text: var(--customer-color-rose-700);
+  --customer-color-danger-subtle: var(--customer-color-rose-50);
+  --customer-color-danger-border: var(--customer-color-rose-200);
+
+  /* §5.2 Type scale: size / line-height / weight per step */
+  --customer-text-display-size: 28px;
+  --customer-text-display-line-height: 36px;
+  --customer-text-display-weight: 800;
+  --customer-text-headline-size: 22px;
+  --customer-text-headline-line-height: 30px;
+  --customer-text-headline-weight: 700;
+  --customer-text-amount-size: 24px;
+  --customer-text-amount-line-height: 32px;
+  --customer-text-amount-weight: 700;
+  --customer-text-title-size: 17px;
+  --customer-text-title-line-height: 24px;
+  --customer-text-title-weight: 600;
+  --customer-text-body-size: 15px;
+  --customer-text-body-line-height: 24px;
+  --customer-text-body-weight: 400;
+  --customer-text-body-strong-size: 15px;
+  --customer-text-body-strong-line-height: 24px;
+  --customer-text-body-strong-weight: 600;
+  --customer-text-label-size: 14px;
+  --customer-text-label-line-height: 20px;
+  --customer-text-label-weight: 500;
+  --customer-text-caption-size: 12px;
+  --customer-text-caption-line-height: 18px;
+  --customer-text-caption-weight: 400;
+  --customer-text-button-size: 16px;
+  --customer-text-button-line-height: 24px;
+  --customer-text-button-weight: 600;
+  --customer-text-input-size: 16px;
+  --customer-text-input-line-height: 24px;
+  --customer-text-input-weight: 400;
+
+  /* §6 Shape and elevation */
+  --customer-radius-card: 16px;
+  --customer-radius-control: 12px;
+  --customer-radius-inset: 12px;
+  --customer-radius-chip: 8px;
+  --customer-radius-sheet: 24px;
+  --customer-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --customer-shadow-raised: 0 -4px 16px rgba(15, 23, 42, 0.06);
+  --customer-shadow-overlay: 0 16px 40px rgba(15, 23, 42, 0.16);
+
+  /* §14 Component sizes */
+  --customer-size-touch-min: 44px;
+  --customer-size-control: 44px;
+  --customer-size-cta: 48px;
+  --customer-size-header: 56px;
+  --customer-size-content: 480px;
+
+  /* §5.1 Font stacks */
+  --customer-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'PingFang SC', 'Hiragino Sans', 'Noto Sans CJK SC', 'Noto Sans Thai', sans-serif;
+  --customer-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Legacy aliases still consumed by theme.css and src/components (removed in a later batch) */
+  --customer-color-brand-primary: var(--customer-color-brand);
+  --customer-color-brand-secondary: var(--customer-color-brand-hover);
+  --customer-color-brand-subtle-border: var(--customer-color-brand-border);
+  --customer-color-bg-page: var(--customer-color-page);
+  --customer-color-bg-card: var(--customer-color-card);
+  --customer-color-bg-inset: var(--customer-color-inset);
+  --customer-color-text-primary: var(--customer-color-text);
+  --customer-color-border-default: var(--customer-color-border);
+}

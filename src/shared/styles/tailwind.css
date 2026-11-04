@@ -1,7 +1,7 @@
 @import "tailwindcss" source(none);
 
-@source "../../apps/selfservice-rental";
-@source "../../shared";
+/* Scan the complete src tree after repository extraction. */
+@source "../..";
 
 @theme {
   --color-primary: #4f46e5;
@@ -36,6 +36,9 @@
   --animate-slide-up: slide-up 0.3s ease-out forwards;
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-scale-in: scale-in 0.2s ease-out;
+  --animate-rise-in: rise-in 0.28s cubic-bezier(0.2, 0, 0, 1) backwards;
+  --animate-pop-in: pop-in 0.24s cubic-bezier(0.2, 0, 0, 1) backwards;
+  --animate-halo-in: halo-in 0.5s cubic-bezier(0.2, 0, 0, 1) backwards;
 
   @keyframes slide-up {
     0% {
@@ -68,6 +71,126 @@
       opacity: 1;
     }
   }
+
+  @keyframes rise-in {
+    0% {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes pop-in {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes halo-in {
+    0% {
+      transform: scale(0.6);
+      opacity: 0.8;
+    }
+
+    100% {
+      transform: scale(1.35);
+      opacity: 0;
+    }
+  }
+}
+
+@theme inline {
+  --color-customer-brand: var(--customer-color-brand);
+  --color-customer-brand-hover: var(--customer-color-brand-hover);
+  --color-customer-brand-pressed: var(--customer-color-brand-pressed);
+  --color-customer-brand-text: var(--customer-color-brand-text);
+  --color-customer-brand-subtle: var(--customer-color-brand-subtle);
+  --color-customer-brand-border: var(--customer-color-brand-border);
+  --color-customer-brand-ring: var(--customer-color-brand-ring);
+  --color-customer-page: var(--customer-color-page);
+  --color-customer-card: var(--customer-color-card);
+  --color-customer-inset: var(--customer-color-inset);
+  --color-customer-fill-disabled: var(--customer-color-fill-disabled);
+  --color-customer-text: var(--customer-color-text);
+  --color-customer-text-secondary: var(--customer-color-text-secondary);
+  --color-customer-text-tertiary: var(--customer-color-text-tertiary);
+  --color-customer-text-disabled: var(--customer-color-text-disabled);
+  --color-customer-text-inverse: var(--customer-color-text-inverse);
+  --color-customer-border: var(--customer-color-border);
+  --color-customer-border-strong: var(--customer-color-border-strong);
+  --color-customer-border-subtle: var(--customer-color-border-subtle);
+  --color-customer-scrim: var(--customer-color-scrim);
+  --color-customer-info: var(--customer-color-info);
+  --color-customer-info-text: var(--customer-color-info-text);
+  --color-customer-info-subtle: var(--customer-color-info-subtle);
+  --color-customer-info-border: var(--customer-color-info-border);
+  --color-customer-success: var(--customer-color-success);
+  --color-customer-success-text: var(--customer-color-success-text);
+  --color-customer-success-subtle: var(--customer-color-success-subtle);
+  --color-customer-success-border: var(--customer-color-success-border);
+  --color-customer-warning: var(--customer-color-warning);
+  --color-customer-warning-text: var(--customer-color-warning-text);
+  --color-customer-warning-subtle: var(--customer-color-warning-subtle);
+  --color-customer-warning-border: var(--customer-color-warning-border);
+  --color-customer-danger: var(--customer-color-danger);
+  --color-customer-danger-text: var(--customer-color-danger-text);
+  --color-customer-danger-subtle: var(--customer-color-danger-subtle);
+  --color-customer-danger-border: var(--customer-color-danger-border);
+
+  --text-customer-display: var(--customer-text-display-size);
+  --text-customer-display--line-height: var(--customer-text-display-line-height);
+  --text-customer-display--font-weight: var(--customer-text-display-weight);
+  --text-customer-headline: var(--customer-text-headline-size);
+  --text-customer-headline--line-height: var(--customer-text-headline-line-height);
+  --text-customer-headline--font-weight: var(--customer-text-headline-weight);
+  --text-customer-amount: var(--customer-text-amount-size);
+  --text-customer-amount--line-height: var(--customer-text-amount-line-height);
+  --text-customer-amount--font-weight: var(--customer-text-amount-weight);
+  --text-customer-title: var(--customer-text-title-size);
+  --text-customer-title--line-height: var(--customer-text-title-line-height);
+  --text-customer-title--font-weight: var(--customer-text-title-weight);
+  --text-customer-body: var(--customer-text-body-size);
+  --text-customer-body--line-height: var(--customer-text-body-line-height);
+  --text-customer-body--font-weight: var(--customer-text-body-weight);
+  --text-customer-body-strong: var(--customer-text-body-strong-size);
+  --text-customer-body-strong--line-height: var(--customer-text-body-strong-line-height);
+  --text-customer-body-strong--font-weight: var(--customer-text-body-strong-weight);
+  --text-customer-label: var(--customer-text-label-size);
+  --text-customer-label--line-height: var(--customer-text-label-line-height);
+  --text-customer-label--font-weight: var(--customer-text-label-weight);
+  --text-customer-caption: var(--customer-text-caption-size);
+  --text-customer-caption--line-height: var(--customer-text-caption-line-height);
+  --text-customer-caption--font-weight: var(--customer-text-caption-weight);
+  --text-customer-button: var(--customer-text-button-size);
+  --text-customer-button--line-height: var(--customer-text-button-line-height);
+  --text-customer-button--font-weight: var(--customer-text-button-weight);
+  --text-customer-input: var(--customer-text-input-size);
+  --text-customer-input--line-height: var(--customer-text-input-line-height);
+  --text-customer-input--font-weight: var(--customer-text-input-weight);
+
+  --radius-customer-card: var(--customer-radius-card);
+  --radius-customer-control: var(--customer-radius-control);
+  --radius-customer-inset: var(--customer-radius-inset);
+  --radius-customer-chip: var(--customer-radius-chip);
+  --radius-customer-sheet: var(--customer-radius-sheet);
+  --shadow-customer-card: var(--customer-shadow-card);
+  --shadow-customer-raised: var(--customer-shadow-raised);
+  --shadow-customer-overlay: var(--customer-shadow-overlay);
+  --spacing-customer-touch-min: var(--customer-size-touch-min);
+  --spacing-customer-control: var(--customer-size-control);
+  --spacing-customer-cta: var(--customer-size-cta);
+  --spacing-customer-header: var(--customer-size-header);
+  --container-customer-content: var(--customer-size-content);
 }
 
 @layer utilities {

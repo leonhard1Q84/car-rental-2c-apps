@@ -6,9 +6,9 @@ const repoRoot = process.cwd();
 const readSource = (relativePath) => readFile(path.join(repoRoot, relativePath), 'utf8');
 
 const [overviewSource, translationsSource, specSource] = await Promise.all([
-  readSource('src/apps/selfservice-rental/components/OverviewScreen.tsx'),
-  readSource('src/apps/selfservice-rental/i18n/pickup-parking-fee.ts'),
-  readSource('workspace/customer/specs/feature/pickup-inspection-security.md')
+  readSource('src/components/OverviewScreen.tsx'),
+  readSource('src/i18n/pickup-parking-fee.ts'),
+  readSource('specs/modules/selfservice-rental/pickup-inspection-security.md')
 ]);
 
 assert.match(

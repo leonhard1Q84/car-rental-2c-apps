@@ -60,6 +60,8 @@ export interface VehicleMetricControlProps {
   onMileageChange: (value: string) => void;
 }
 
+const metricInputClass = 'min-h-11 w-full rounded-customer-control border border-customer-border-strong bg-customer-card px-3 py-2.5 text-customer-input text-customer-text outline-none focus:border-customer-brand focus:ring-4 focus:ring-customer-brand-ring';
+
 const VehicleMetricDashboardPhoto: React.FC<{
   config: DashboardPhotoConfig;
   labels: VehicleMetricControlLabels;
@@ -67,28 +69,28 @@ const VehicleMetricDashboardPhoto: React.FC<{
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="mt-4 border-t border-gray-200 pt-4" data-vehicle-metric-dashboard-photo>
+    <div className="mt-4 border-t border-customer-border pt-4" data-vehicle-metric-dashboard-photo>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-gray-800">
+          <p className="text-customer-body-strong text-customer-text">
             {labels.dashboardPhoto}
-            {config.required ? <span className="ml-1 text-red-600">*</span> : null}
+            {config.required ? <span className="ml-1 text-customer-danger">*</span> : null}
           </p>
-          <p className="mt-1 text-xs leading-5 text-gray-500">{labels.dashboardPhotoHint}</p>
+          <p className="mt-1 text-customer-caption text-customer-text-tertiary">{labels.dashboardPhotoHint}</p>
         </div>
       </div>
 
       <div className="mt-3 flex items-start gap-3">
         {config.photo ? (
-          <div className="relative h-28 w-36 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+          <div className="relative h-28 w-36 shrink-0 overflow-hidden rounded-customer-inset border border-customer-border bg-customer-inset">
             <img src={config.photo} alt={labels.dashboardPhoto} className="h-full w-full object-cover" />
-            <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 bg-black/55 p-1.5">
+            <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 bg-customer-scrim p-1.5">
               <button
                 type="button"
                 title={labels.dashboardPhotoReplace}
                 aria-label={labels.dashboardPhotoReplace}
                 onClick={() => inputRef.current?.click()}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition-colors hover:bg-gray-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-customer-card text-customer-text-secondary shadow-sm transition-colors hover:bg-customer-inset"
               >
                 <RefreshCw size={15} />
               </button>
@@ -97,7 +99,7 @@ const VehicleMetricDashboardPhoto: React.FC<{
                 title={labels.dashboardPhotoRemove}
                 aria-label={labels.dashboardPhotoRemove}
                 onClick={config.onRemove}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-red-600 shadow-sm transition-colors hover:bg-red-50"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-customer-card text-customer-danger shadow-sm transition-colors hover:bg-customer-danger-subtle"
               >
                 <Trash2 size={15} />
               </button>
@@ -107,10 +109,10 @@ const VehicleMetricDashboardPhoto: React.FC<{
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="flex h-28 w-36 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-3 text-center text-gray-600 transition-colors hover:border-gray-400 hover:bg-gray-100"
+            className="flex h-28 w-36 shrink-0 flex-col items-center justify-center rounded-customer-inset border-2 border-dashed border-customer-border-strong bg-customer-inset px-3 text-center text-customer-text-secondary transition-colors hover:border-customer-border-strong hover:bg-customer-fill-disabled"
           >
             <Camera size={24} />
-            <span className="mt-2 text-xs font-semibold leading-4">{labels.dashboardPhotoAdd}</span>
+            <span className="mt-2 text-customer-label">{labels.dashboardPhotoAdd}</span>
           </button>
         )}
         <input
@@ -124,7 +126,7 @@ const VehicleMetricDashboardPhoto: React.FC<{
       </div>
 
       {config.required && !config.photo ? (
-        <p className="mt-3 flex items-start gap-1.5 text-xs font-medium leading-5 text-amber-700">
+        <p className="mt-3 flex items-start gap-1.5 text-customer-caption text-customer-warning-text">
           <TriangleAlert size={15} className="mt-0.5 shrink-0" />
           {labels.dashboardPhotoRequired}
         </p>
@@ -137,7 +139,7 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
   labels,
   compact = false,
   valuesOrder = 'ENERGY_MILEAGE',
-  titleClassName = 'text-base font-bold text-gray-900',
+  titleClassName = 'text-customer-title',
   sourceText,
   sourceTimestamp,
   sourceAvailable,
@@ -168,13 +170,13 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
   onMileageChange
 }) => (
   <section
-    className={compact ? 'min-w-0' : 'rounded-lg border border-gray-200 bg-white p-4 shadow-sm'}
+    className={compact ? 'min-w-0' : 'rounded-customer-card border border-customer-border bg-customer-card p-4 shadow-customer-card'}
     data-unified-vehicle-metric-control
   >
     {!compact && <div className="flex items-start justify-between gap-3">
       <h2 className={titleClassName}>{labels.title}</h2>
       {statusLabel ? (
-        <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+        <span className="shrink-0 rounded-full border border-customer-success-border bg-customer-success-subtle px-2.5 py-1 text-customer-caption font-semibold text-customer-success-text">
           {statusLabel}
         </span>
       ) : null}
@@ -182,13 +184,13 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
 
     {dashboardPhoto ? !dashboardAfterSource ? <VehicleMetricDashboardPhoto config={dashboardPhoto} labels={labels} /> : null : evidenceBeforeSource}
 
-    {!compact && <div className="mt-4 border-t border-gray-200 pt-4" data-vehicle-metric-source>
+    {!compact && <div className="mt-4 border-t border-customer-border pt-4" data-vehicle-metric-source>
       {sourceContent ?? <div className="flex items-start gap-2">
-        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${sourceAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${sourceAvailable ? 'bg-customer-success-subtle text-customer-success-text' : 'bg-customer-warning-subtle text-customer-warning-text'}`}>
           {sourceAvailable ? <Wifi size={15} /> : <TriangleAlert size={15} />}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium leading-5 text-gray-700">
+          <p className="text-customer-caption text-customer-text-secondary">
             {sourceText}
             {sourceAvailable && sourceTimestamp
               ? ` · ${new Date(sourceTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
@@ -199,7 +201,7 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
               type="button"
               onClick={retryAction.onClick}
               disabled={retryAction.disabled}
-              className="mt-1 text-xs font-semibold text-indigo-600 disabled:opacity-50"
+              className="mt-1 min-h-customer-touch-min text-customer-label text-customer-brand-text disabled:text-customer-text-disabled"
             >
               {retryAction.label}
             </button>
@@ -214,8 +216,8 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
     {dashboardActions}
 
     <div className={`${evidenceValuesLayout === 'TABLET_INLINE' ? '' : 'mt-4 '}grid min-w-0 grid-cols-2 gap-3 max-[380px]:grid-cols-1`} data-vehicle-metric-values>
-      <label className={`${valuesOrder === 'MILEAGE_ENERGY' ? 'order-2 ' : ''}min-w-0 text-xs text-gray-600`} data-vehicle-metric-energy>
-        <span className="mb-1 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 font-semibold leading-5 text-gray-700 max-[520px]:flex-col max-[520px]:items-start"><span className="break-words">{labels.energy}</span>{energyStatus}</span>
+      <label className={`${valuesOrder === 'MILEAGE_ENERGY' ? 'order-2 ' : ''}min-w-0 text-customer-caption text-customer-text-secondary`} data-vehicle-metric-energy>
+        <span className="mb-1 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 text-customer-label text-customer-text-secondary max-[520px]:flex-col max-[520px]:items-start"><span className="break-words">{labels.energy}</span>{energyStatus}</span>
         {energyEditable ? (
           energyKind === 'BATTERY' ? (
             <div className="relative">
@@ -227,29 +229,29 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
                 aria-invalid={Boolean(energyError)}
                 value={energyValue.replace('%', '')}
                 onChange={(event) => onEnergyChange(event.target.value)}
-                className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 pr-8 text-sm text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className={`${metricInputClass} pr-8`}
               />
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-500">%</span>
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-customer-caption text-customer-text-tertiary">%</span>
             </div>
           ) : (
             <select
               aria-invalid={Boolean(energyError)}
               value={energyValue}
               onChange={(event) => onEnergyChange(event.target.value)}
-              className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              className={metricInputClass}
             >
               <option value="">{labels.selectPlaceholder}</option>
               {(energyOptions ?? []).map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           )
         ) : (
-          <div className="min-h-11 rounded-lg bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-900">{energyValue || '-'}</div>
+          <div className="min-h-11 rounded-customer-control bg-customer-inset px-3 py-2.5 text-customer-body-strong text-customer-text">{energyValue || '-'}</div>
         )}
-        {energyError ? <span className="mt-1 block text-xs text-red-600">{energyError}</span> : null}
+        {energyError ? <span className="mt-1 block text-customer-caption text-customer-danger-text">{energyError}</span> : null}
       </label>
 
-      <label className={`${valuesOrder === 'MILEAGE_ENERGY' ? 'order-1 ' : ''}min-w-0 text-xs text-gray-600`} data-vehicle-metric-mileage>
-        <span className="mb-1 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 font-semibold leading-5 text-gray-700 max-[520px]:flex-col max-[520px]:items-start"><span className="break-words">{labels.mileage}</span>{mileageStatus}</span>
+      <label className={`${valuesOrder === 'MILEAGE_ENERGY' ? 'order-1 ' : ''}min-w-0 text-customer-caption text-customer-text-secondary`} data-vehicle-metric-mileage>
+        <span className="mb-1 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 text-customer-label text-customer-text-secondary max-[520px]:flex-col max-[520px]:items-start"><span className="break-words">{labels.mileage}</span>{mileageStatus}</span>
         {mileageEditable ? (
           <div className="relative">
             <input
@@ -259,27 +261,27 @@ export const VehicleMetricControl: React.FC<VehicleMetricControlProps> = ({
               aria-invalid={Boolean(mileageError)}
               value={mileage}
               onChange={(event) => onMileageChange(event.target.value)}
-              className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 pr-10 text-sm text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              className={`${metricInputClass} pr-10`}
             />
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-500">km</span>
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-customer-caption text-customer-text-tertiary">km</span>
           </div>
         ) : (
-          <div className="min-h-11 rounded-lg bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-900">{mileage ? `${mileage} km` : '-'}</div>
+          <div className="min-h-11 rounded-customer-control bg-customer-inset px-3 py-2.5 text-customer-body-strong text-customer-text">{mileage ? `${mileage} km` : '-'}</div>
         )}
-        {mileageError ? <span className="mt-1 block text-xs text-red-600">{mileageError}</span> : null}
+        {mileageError ? <span className="mt-1 block text-customer-caption text-customer-danger-text">{mileageError}</span> : null}
       </label>
     </div>
     </div>
 
     {comparisonText ? (
-      <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-5 text-gray-700">
+      <div className="mt-4 rounded-customer-inset border border-customer-border bg-customer-inset px-3 py-2 text-customer-caption text-customer-text-secondary">
         {comparisonText}
-        {comparisonWarning ? <span className="mt-1 block font-semibold text-amber-700">{comparisonWarning}</span> : null}
+        {comparisonWarning ? <span className="mt-1 block text-customer-label text-customer-warning-text">{comparisonWarning}</span> : null}
       </div>
     ) : null}
 
     {evidenceAfterValues}
-    {requiredMessage ? <p className="mt-3 text-xs font-medium text-amber-700">{requiredMessage}</p> : null}
+    {requiredMessage ? <p className="mt-3 text-customer-label text-customer-warning-text">{requiredMessage}</p> : null}
     {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
   </section>
 );

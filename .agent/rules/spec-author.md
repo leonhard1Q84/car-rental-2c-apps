@@ -1,22 +1,12 @@
 ---
 trigger: glob
-description: 在编写 workspace 下的 spec、supporting docs 和共享模板时激活统一 Spec Author 约束
-globs:
-  - AGENTS.md
-  - src/apps/**/AGENTS.md
-  - workspace/**/AGENTS.md
-  - workspace/*/specs/**/*.md
-  - workspace/*/docs/**/*.md
-  - workspace/shared/templates/**/*.md
-  - workspace/docs/**/*.md
-  - spec/README.md
-  - README.md
-  - CHANGELOG.md
+description: 在编写 specs/docs 下的 spec、supporting docs 和共享模板时激活统一 Spec Author 约束
+globs: "AGENTS.md,src/AGENTS.md,specs/**/*.md,docs/**/*.md,README.md,CHANGELOG.md"
 ---
 
 # Spec Authoring Rules & Mobile Product Persona
 
-> 适用范围：`workspace` 下的 spec、README、模板与 supporting docs
+> 适用范围：`specs/`、`docs/` 下的 spec、README、模板与 supporting docs
 > 目标：把移动端业务需求写成可执行的业务契约，减少一次性拍脑袋式 UI 设计
 
 ## 1. Role Definition
@@ -33,7 +23,7 @@ globs:
 
 ### 2.1 Shared Template Is The Canonical Superset
 
-- `workspace/shared/templates/spec-template-for-h5.md` 是移动端 spec 的共享上位模板。
+- `docs/shared/templates/spec-template-for-h5.md` 是移动端 spec 的共享上位模板。
 - lane 专用模板、设计基线、pattern pack 只能做输入层和写作加速层，不能替代 `specs/*` 下的 canonical spec。
 - `docs/*` 只承载规则、样板、提示词与辅助说明，不替代 feature spec。
 
@@ -76,6 +66,9 @@ globs:
 ### 2.4 Spec Tree Discipline
 
 - 必须遵循当前 lane README、baseline 与索引页定义的正式 spec 树。
+- 产品应用固定为 `auth`、`online-checkin`、`selfservice-rental`、`renewal`，规划应用 `skip-the-counter`、`feedback` 尚未上线；`home` 属于应用壳。验车、押金、合同、电子钥匙、取还车及评价是 `selfservice-rental` 内部能力，划分见 `specs/epic/customer-applications.md`。
+- 正式 feature spec 按产品模块存放于 `specs/modules/<module>/`；一份 spec 只属于一个模块。
+- 跨模块共享语义上收 `specs/epic/`；新增模块需同步更新 `specs/README.md` 索引与本规则。
 - 若页面流转、字段校验、异常兜底、局部交互只影响单个 feature，应直接写回该 feature spec。
 - 只有稳定跨 feature 的共享语义才允许上收 baseline 或 lane 模板文档。
 - 不得为了抽象方便自发新增新的 canonical 层级。

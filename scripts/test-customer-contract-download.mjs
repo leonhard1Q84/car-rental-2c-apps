@@ -47,14 +47,14 @@ const server = await createServer({
   appType: 'custom',
   optimizeDeps: { noDiscovery: true, include: [], entries: [] },
   logLevel: 'error',
-  server: { middlewareMode: true }
+  server: { middlewareMode: true, hmr: false, ws: false }
 });
 
 try {
   const { saveCustomerContractFile, loadCustomerContractFile } = await server.ssrLoadModule('/src/shared/services/customerContractFileStorage.ts');
   const { isCustomerContractFile } = await server.ssrLoadModule('/src/shared/contracts/customerContractFile.ts');
   const pdf = new Blob(['%PDF-1.4 frozen-store-contract'], { type: 'application/pdf' });
-  const file = { orderId: 'ORD-20260319-012', documentId: 'base-1', contractNumber: 'CT-001', fileName: 'CT-001.pdf', generatedAt: '2026-10-25T00:00:00Z', blob: pdf };
+  const file = { orderId: 'RC10014', documentId: 'base-1', contractNumber: 'CT-001', fileName: 'CT-001.pdf', generatedAt: '2026-10-25T00:00:00Z', blob: pdf };
   await saveCustomerContractFile(file);
   const restored = await loadCustomerContractFile(file.orderId);
   assert.equal(await restored.blob.text(), await pdf.text());
@@ -63,10 +63,10 @@ try {
   assert.equal(isCustomerContractFile({ ...file, blob: new Blob(['x'], {type:'text/html'}) }), false);
   const React = (await import('react')).default;
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const { PreparationContractContent } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationContractPage.tsx');
-  const { LanguageProvider } = await server.ssrLoadModule('/src/apps/selfservice-rental/contexts/LanguageContext.tsx');
-  const { preparationTranslations } = await server.ssrLoadModule('/src/apps/selfservice-rental/i18n/preparation.ts');
-  const { newDraft } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/model.ts');
+  const { PreparationContractContent } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/PreparationContractPage.tsx');
+  const { LanguageProvider } = await server.ssrLoadModule('/src/contexts/LanguageContext.tsx');
+  const { preparationTranslations } = await server.ssrLoadModule('/src/i18n/preparation.ts');
+  const { newDraft } = await server.ssrLoadModule('/src/app/customer-journey/model.ts');
   const draft = { ...newDraft(file.orderId), contractSignature: { orderId: file.orderId, revision:'demo-contract-v1', signedAt:file.generatedAt, signature:'data:image/png;base64,AA==', language:'zh-CN' } };
   const render = (lang, extras) => renderToStaticMarkup(React.createElement(LanguageProvider, {initialLang:lang}, React.createElement(PreparationContractContent, {draft, onBack(){}, onSaved(){}, onBusy(){}, onDirty(){}, ...extras})));
   for (const [lang, copy] of Object.entries(preparationTranslations)) {

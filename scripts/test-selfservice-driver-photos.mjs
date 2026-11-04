@@ -6,16 +6,16 @@ import { createServer } from 'vite';
 const server = await createServer({
   appType: 'custom', logLevel: 'error',
   optimizeDeps: { noDiscovery: true, include: [], entries: [] },
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: false, ws: false },
 });
 
 try {
-  const base = '/src/apps/selfservice-rental';
-  const { isDriverSnapshotValid, buildDriverPhotoConfirmation, isDriverPhotoConfirmationComplete, driverPhotoKey } = await server.ssrLoadModule(`${base}/modules/driver-photos/model.ts`);
-  const { createDemoDriverSnapshot } = await server.ssrLoadModule(`${base}/modules/driver-photos/fixtures.ts`);
+  const base = '/src';
+  const { isDriverSnapshotValid, buildDriverPhotoConfirmation, isDriverPhotoConfirmationComplete, driverPhotoKey } = await server.ssrLoadModule(`${base}/modules/selfservice-rental/driver-photos/model.ts`);
+  const { createDemoDriverSnapshot } = await server.ssrLoadModule(`${base}/modules/selfservice-rental/driver-photos/fixtures.ts`);
   const { isInspectionReadyForContract } = await server.ssrLoadModule(`${base}/components/inspectionContractEntry.ts`);
   const { default: InspectionScreen } = await server.ssrLoadModule(`${base}/components/InspectionScreen.tsx`);
-  const { DriverPhotoSection } = await server.ssrLoadModule(`${base}/modules/driver-photos/DriverPhotoSection.tsx`);
+  const { DriverPhotoSection } = await server.ssrLoadModule(`${base}/modules/selfservice-rental/driver-photos/DriverPhotoSection.tsx`);
   const { LanguageProvider } = await server.ssrLoadModule(`${base}/contexts/LanguageContext.tsx`);
   const { driverPhotoTranslations: translations } = await server.ssrLoadModule(`${base}/i18n/driver-photos.ts`);
   const snapshot = createDemoDriverSnapshot('ORDER-1', true);

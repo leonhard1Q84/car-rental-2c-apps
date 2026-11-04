@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/check-customer-styles.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "check:boundaries": "node scripts/check-customer-boundaries.mjs",
-    "test:customer": "node scripts/test-customer-contract-download.mjs && node scripts/test-customer-inspection-capture.mjs && node scripts/test-customer-inspection-publication-storage.mjs && node scripts/test-customer-pickup-inspection.mjs && node scripts/test-customer-pickup-journey.mjs && node scripts/test-customer-preparation-contract.mjs && node scripts/test-customer-signature-canvas.mjs && node scripts/test-customer-signature-drawing.mjs && node scripts/test-customer-signing-confirmation.mjs && node scripts/test-pickup-preparation.mjs && node scripts/test-selfservice-driver-photos.mjs && node scripts/test-selfservice-pickup-parking-fee.mjs && node scripts/test-selfservice-rental-contract-confirmations.mjs"
+    "test:customer": "node scripts/test-customer-contract-download.mjs && node scripts/test-customer-inspection-capture.mjs && node scripts/test-customer-inspection-publication-storage.mjs && node scripts/test-customer-pickup-inspection.mjs && node scripts/test-customer-pickup-journey.mjs && node scripts/test-customer-preparation-contract.mjs && node scripts/test-customer-signature-canvas.mjs && node scripts/test-customer-signature-drawing.mjs && node scripts/test-customer-signing-confirmation.mjs && node scripts/test-pickup-preparation.mjs && node scripts/test-selfservice-driver-photos.mjs && node scripts/test-selfservice-pickup-parking-fee.mjs && node scripts/test-selfservice-rental-contract-confirmations.mjs && node scripts/test-customer-service-hub.mjs && node scripts/test-rental-extension-scheduling.mjs && node scripts/test-customer-auth.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.563.0",

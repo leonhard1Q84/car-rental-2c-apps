@@ -11,9 +11,9 @@
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/apps/selfservice-rental/*"],
-      "@customer/*": ["./src/apps/selfservice-rental/*"],
-      "@selfservice/*": ["./src/apps/selfservice-rental/*"],
+      "@/*": ["./src/*"],
+      "@customer/*": ["./src/*"],
+      "@selfservice/*": ["./src/*"],
       "@shared/*": ["./src/shared/*"]
     },
     "allowImportingTsExtensions": true,

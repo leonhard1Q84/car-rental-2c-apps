@@ -14,9 +14,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(root, 'src/apps/selfservice-rental'),
-      '@customer': path.resolve(root, 'src/apps/selfservice-rental'),
-      '@selfservice': path.resolve(root, 'src/apps/selfservice-rental'),
+      '@': path.resolve(root, 'src'),
+      '@customer': path.resolve(root, 'src'),
+      '@selfservice': path.resolve(root, 'src'),
       '@shared': path.resolve(root, 'src/shared'),
     },
   },

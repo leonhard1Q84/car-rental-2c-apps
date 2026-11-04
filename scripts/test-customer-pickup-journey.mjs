@@ -2,19 +2,19 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
-const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false } });
+const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
 try {
-  const base = '/src/apps/selfservice-rental/';
+  const base = '/src/';
   const load = path => server.ssrLoadModule(base + path);
-  const { pickupJourneyState } = await load('modules/pickup-preparation/pickupJourneyState.ts');
-  const { InspectionCaptureSession } = await load('modules/pickup-preparation/inspection/capture.ts');
-  const { confirmInspectionAndContinue } = await load('modules/pickup-preparation/inspection/sequentialConfirmation.ts');
-  const { PreparationPickupSteps } = await load('modules/pickup-preparation/PreparationPickupJourney.tsx');
-  const { InspectionCaptureControls } = await load('modules/pickup-preparation/inspection/InspectionCaptureSection.tsx');
-  const { InspectionConfirmDialogContent } = await load('modules/pickup-preparation/inspection/InspectionConfirmDialog.tsx');
+  const { pickupJourneyState } = await load('modules/selfservice-rental/pickup/pickupJourneyState.ts');
+  const { InspectionCaptureSession } = await load('modules/selfservice-rental/pickup/inspection/capture.ts');
+  const { confirmInspectionAndContinue } = await load('modules/selfservice-rental/pickup/inspection/sequentialConfirmation.ts');
+  const { PreparationPickupSteps } = await load('modules/selfservice-rental/pickup/PreparationPickupJourney.tsx');
+  const { InspectionCaptureControls } = await load('modules/selfservice-rental/pickup/inspection/InspectionCaptureSection.tsx');
+  const { InspectionConfirmDialogContent } = await load('modules/selfservice-rental/pickup/inspection/InspectionConfirmDialog.tsx');
   const { preparationTranslations } = await load('i18n/preparation.ts');
   const { LanguageProvider } = await load('contexts/LanguageContext.tsx');
-  const { preparationPageTitleKey } = await load('modules/pickup-preparation/servicePresentation.ts');
+  const { preparationPageTitleKey } = await load('app/customer-journey/servicePresentation.ts');
   const expectedTitles = {
     home: 'myRentalTitle', auth: 'prepServiceTitle', booking: 'prepBooking',
     drivers: 'prepIdentityTileTitle', documents: 'prepIdentityTileTitle',
@@ -27,10 +27,10 @@ try {
     assert.equal(copy[preparationPageTitleKey('documents')], copy.prepIdentityTileTitle);
     assert.equal(copy[preparationPageTitleKey('pickup')], copy.prepPickupTileTitle);
   }
-  const ready = { status: 'ready', orderId: 'PREP01', snapshot: { revision: 'r1' } };
+  const ready = { status: 'ready', orderId: 'RC10001', snapshot: { revision: 'r1' } };
   const verified = { ...ready, confirmation: { at: '2026-10-26T00:00:00Z' } };
   for (const status of ['loading', 'empty', 'error']) {
-    const state = pickupJourneyState({ status, orderId: 'PREP01' }, false, 2, 'r1');
+    const state = pickupJourneyState({ status, orderId: 'RC10001' }, false, 2, 'r1');
     assert.equal(state.current, 1); assert.equal(state.changed, false);
   }
   assert.equal(pickupJourneyState(ready, false, 2).current, 1);
@@ -38,7 +38,7 @@ try {
   assert.equal(pickupJourneyState(verified, false, 1).current, 1);
   assert.equal(pickupJourneyState({ ...ready, snapshot: { revision: 'r2' } }, false, 2, 'r1').changed, true);
   assert.equal(pickupJourneyState({ ...ready, snapshot: { revision: 'r2' } }, true, null, 'r1').current, 2);
-  const binding = { orderId: 'PREP01', vehicleId: 'car1', revision: 'r1' };
+  const binding = { orderId: 'RC10001', vehicleId: 'car1', revision: 'r1' };
   let fail = true, saved, advances = 0;
   const repository = { load: async () => saved, save: async value => { if (fail) throw new Error('SAVE_FAILED'); saved = structuredClone(value); } };
   const session = new InspectionCaptureSession(binding, repository);

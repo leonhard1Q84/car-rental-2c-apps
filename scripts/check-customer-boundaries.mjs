@@ -15,9 +15,12 @@ const filesIn = (dir) => fs.existsSync(dir)
   })
   : [];
 
-const apps = fs.readdirSync(path.join(root, 'src/apps'), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-assert.deepEqual(apps, ['selfservice-rental'], 'Only the customer app belongs in this repository');
+assert.ok(!fs.existsSync(path.join(root, 'src/apps')), 'src must stay flat: no src/apps directory');
+
+const customerModules = new Set(['auth', 'home', 'online-checkin', 'selfservice-rental', 'rental-extension']);
+for (const entry of fs.readdirSync(path.join(root, 'src/modules'), { withFileTypes: true })) {
+  if (entry.isDirectory() && !customerModules.has(entry.name)) issues.push(`Unexpected top-level customer module: ${entry.name}. Check specs/epic/customer-applications.md.`);
+}
 
 for (const name of ['merchant.html', 'store-ops.html']) {
   if (fs.existsSync(path.join(root, name))) issues.push(`Unexpected application entry: ${name}`);
@@ -70,7 +73,7 @@ for (const file of sources) {
     }
     const destination = relative(resolved.resolvedFileName);
     if (destination.startsWith(`..${path.sep}`)) issues.push(`Import outside repository: ${relative(file)}`);
-    if (relative(file).startsWith('src/shared/') && destination.startsWith('src/apps/')) {
+    if (relative(file).startsWith('src/shared/') && destination.startsWith('src/') && !destination.startsWith('src/shared/')) {
       issues.push(`Shared depends on app: ${relative(file)} -> ${destination}`);
     }
   };

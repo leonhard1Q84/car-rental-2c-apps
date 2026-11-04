@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false } });
+const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
 try {
-  const { resizeSignatureCanvas } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/signatureCanvasSize.ts');
+  const { resizeSignatureCanvas } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/signatureCanvasSize.ts');
   let transform = 2, clears = 0, strokes = [];
   const context = { getTransform: () => ({ a: transform }), setTransform: value => { transform = value; } };
   const canvas = { width: 0, height: 0, offsetWidth: 0, offsetHeight: 0, getContext: () => context };

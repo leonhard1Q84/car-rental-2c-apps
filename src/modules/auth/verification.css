@@ -1,0 +1,5 @@
+/* The entry page retains its brand treatment while the form is incomplete. */
+.customer-auth .customer-auth-submit:disabled {
+  background-color: color-mix(in srgb, var(--customer-color-brand) 40%, var(--customer-color-card));
+  color: var(--customer-color-text);
+}

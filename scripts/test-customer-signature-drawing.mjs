@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false } });
+const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
 try {
-  const { createSignatureDrawing } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/signatureDrawing.ts');
-  const { resizeSignatureCanvas } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/signatureCanvasSize.ts');
+  const { createSignatureDrawing } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/signatureDrawing.ts');
+  const { resizeSignatureCanvas } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/signatureCanvasSize.ts');
   let ink = [], transform = 1, last, captured = null, dirty = false;
   const context = { getTransform: () => ({ a: transform }), setTransform: value => { transform = value; }, beginPath() {}, moveTo(x,y) { last = [x,y]; }, lineTo(x,y) { ink.push([last, [x,y]]); }, stroke() {}, arc(x,y) { ink.push([x,y]); }, fill() {}, clearRect() { ink = []; } };
   const canvas = { width: 0, height: 0, offsetWidth: 0, offsetHeight: 0, getContext: () => context, getBoundingClientRect: () => ({ left: 40, top: 100 }), setPointerCapture: id => { captured = id; }, hasPointerCapture: id => id === captured, releasePointerCapture: () => { captured = null; }, toDataURL: type => { assert.equal(type, 'image/png'); assert.ok(ink.length); return 'data:image/png;base64,TEST'; } };

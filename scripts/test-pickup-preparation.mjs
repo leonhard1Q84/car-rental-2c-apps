@@ -2,36 +2,57 @@ import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 const originalDateNow = Date.now;
 Date.now = () => Date.parse('2026-10-31T12:00:00Z');
-const server = await createServer({ appType: 'custom', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, logLevel: 'error', server: { middlewareMode: true } });
+const server = await createServer({ appType: 'custom', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } });
 try {
-  const model = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/model.ts');
-  const { createPreparationMaterials, preparationMaterials, preparationConfirmationItems, preparationTermsComplete } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/materials.ts');
-  const { preparationTranslations } = await server.ssrLoadModule('/src/apps/selfservice-rental/i18n/preparation.ts');
-  const { resolveRentalMaterialConfiguration, updateRentalMaterialConfirmation } = await server.ssrLoadModule('/src/apps/selfservice-rental/components/rentalContractConfirmation.ts');
+  const model = await server.ssrLoadModule('/src/app/customer-journey/model.ts');
+  const { createPreparationMaterials, preparationMaterials, preparationConfirmationItems, preparationTermsComplete } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/materials.ts');
+  const { preparationTranslations } = await server.ssrLoadModule('/src/i18n/preparation.ts');
+  const { resolveRentalMaterialConfiguration, updateRentalMaterialConfirmation } = await server.ssrLoadModule('/src/components/rentalContractConfirmation.ts');
   const { newDraft, newDriver, requiredDocuments, requiredDocumentPages, validDrivers, completion, canSubmit, submitDraft } = model;
-  const { matchesPreparationBooking, findPreparationBooking, preparationOrderId, preparationEntryStep } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/verification.ts');
+  const { matchesPreparationBooking, findPreparationBooking, preparationOrderId, preparationEntryStep } = await server.ssrLoadModule('/src/modules/auth/verification.ts');
   assert.equal(preparationEntryStep(null), 'auth');
   assert.equal(preparationEntryStep('unknown'), 'auth');
   assert.equal(preparationEntryStep('drivers'), 'drivers');
   assert.equal(preparationEntryStep('details'), 'details');
   assert.equal(preparationEntryStep('notices'), 'notices');
-  assert.equal(matchesPreparationBooking(' prep01 ', ' 5678 '), true);
-  assert.equal(matchesPreparationBooking('prep01', '5678'), true);
-  assert.equal(matchesPreparationBooking('prep01', '56-78'), true);
-  assert.equal(matchesPreparationBooking('XHS-NRT-20260319-312', '1012'), true);
-  assert.equal(findPreparationBooking('XHS-NRT-20260319-312', '1012')?.orderId, 'ORD-20260319-012');
-  for (const [reference, phoneLast4] of [['', '5678'], ['NRT-PREP-001', '5678'], ['PREP01', ''], ['PREP01', '1234'], ['PREP01', '567'], ['WRONG', '5678']]) {
+  assert.equal(matchesPreparationBooking(' RC10001 ', ' 8888 '), true);
+  assert.equal(matchesPreparationBooking('RC10001', '8888'), true);
+  assert.equal(matchesPreparationBooking('RC10001', '88-88'), true);
+  assert.equal(matchesPreparationBooking('XHS-NRT-20260319-312', '8888'), false);
+  assert.equal(findPreparationBooking('RC10014', '8888')?.orderId, 'RC10014');
+  for (const [reference, phoneLast4] of [['', '8888'], ['NRT-PREP-001', '8888'], ['RC10001', ''], ['RC10001', '1234'], ['RC10001', '567'], ['WRONG', '8888']]) {
     assert.equal(matchesPreparationBooking(reference, phoneLast4), false);
   }
-  assert.equal(findPreparationBooking(' prep02 ', ' 5678 ')?.orderId, 'PREP02');
-  assert.equal(findPreparationBooking('NRT-PREP-002', '5678'), undefined);
-  assert.equal(findPreparationBooking('PREP02', '1234'), undefined);
-  assert.equal(findPreparationBooking('PREP02', '567'), undefined);
-  assert.equal(preparationOrderId('PREP02'), 'PREP02');
-  assert.equal(preparationOrderId('XHS-NRT-20260319-312'), 'ORD-20260319-012');
-  assert.equal(preparationOrderId('UNKNOWN'), 'PREP01');
-  const untouched = newDraft('PREP02');
-  assert.equal(untouched.orderId, 'PREP02');
+  assert.equal(findPreparationBooking(' RC10002 ', ' 8888 ')?.orderId, 'RC10002');
+  assert.equal(findPreparationBooking('NRT-PREP-002', '8888'), undefined);
+  assert.equal(findPreparationBooking('RC10002', '1234'), undefined);
+  assert.equal(findPreparationBooking('RC10002', '567'), undefined);
+  assert.equal(preparationOrderId('RC10002'), 'RC10002');
+  assert.equal(preparationOrderId('XHS-NRT-20260319-312'), 'RC10014');
+  assert.equal(preparationOrderId('UNKNOWN'), 'RC10001');
+  const { isValidMockCredentials, DEMO_ACCOUNTS } = await server.ssrLoadModule('/src/mockAccounts.ts');
+  assert.equal(isValidMockCredentials(' rc10015 ', ' 8888 '), true);
+  assert.equal(isValidMockCredentials('RC10015', '88-88'), true);
+  assert.equal(isValidMockCredentials('RC10015', 'Smith'), false);
+  assert.equal(isValidMockCredentials('RC10015', '1234'), false);
+  assert.equal(isValidMockCredentials('RC10015', '567'), false);
+  assert.equal(isValidMockCredentials('UNKNOWN', '8888'), false);
+  for (const { orderNo } of DEMO_ACCOUNTS) {
+    assert.equal(isValidMockCredentials(orderNo, '8888'), true);
+    assert.equal(isValidMockCredentials(orderNo, '5678'), false);
+  }
+  const { preparationBookings } = await server.ssrLoadModule('/src/app/customer-journey/bookingFixtures.ts');
+  const scenarioOrderIds = [...preparationBookings.map(booking => booking.orderId), ...DEMO_ACCOUNTS.map(account => account.orderNo)];
+  assert.deepEqual(scenarioOrderIds.sort(), Array.from({ length: 24 }, (_, index) => `RC${10001 + index}`), 'all mock scenarios have unique consecutive order numbers');
+  for (const { orderId, confirmationCode } of preparationBookings) {
+    assert.equal(findPreparationBooking(` ${orderId.toLowerCase()} `, '8888')?.orderId, orderId);
+    assert.equal(findPreparationBooking(orderId, '5678'), undefined);
+    assert.equal(findPreparationBooking(confirmationCode, '8888'), undefined, 'confirmation code cannot replace the order number');
+  }
+  assert.equal(findPreparationBooking('PREP01', '8888'), undefined);
+  assert.equal(isValidMockCredentials('DEMO', '8888'), false);
+  const untouched = newDraft('RC10002');
+  assert.equal(untouched.orderId, 'RC10002');
   assert.deepEqual(completion(untouched, []), { booking: false, drivers: true, documents: false, terms: false }, 'prefilled valid driver data does not complete missing documents');
   assert.equal(untouched.confirmation, undefined);
   assert.equal(untouched.submittedAt, undefined);
@@ -70,11 +91,11 @@ try {
     }
   };
   try {
-    const { loadPreparation, savePreparation } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/storage.ts');
-    const { reopenPreparation } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/review.ts');
-    for (const [orderId, state] of [['PREP04', 'REJECTED'], ['PREP05', 'APPROVED']]) {
-      assert.equal(findPreparationBooking(` ${orderId.toLowerCase()} `, ' 5678 ')?.orderId, orderId);
-      assert.equal(findPreparationBooking(orderId, '5678')?.orderId, orderId);
+    const { loadPreparation, savePreparation } = await server.ssrLoadModule('/src/app/customer-journey/storage.ts');
+    const { reopenPreparation } = await server.ssrLoadModule('/src/modules/online-checkin/review.ts');
+    for (const [orderId, state] of [['RC10004', 'REJECTED'], ['RC10005', 'APPROVED']]) {
+      assert.equal(findPreparationBooking(` ${orderId.toLowerCase()} `, ' 8888 ')?.orderId, orderId);
+      assert.equal(findPreparationBooking(orderId, '8888')?.orderId, orderId);
       failWrite = true;
       await assert.rejects(loadPreparation(orderId), /STORAGE_FULL/, 'initialization must report persistence failure');
       assert.equal(records.has(orderId), false);
@@ -98,17 +119,17 @@ try {
         assert.equal(reloaded.draft.reviewHistory.length, 1);
       }
     }
-    const rejectedRecord = await loadPreparation('PREP03');
+    const rejectedRecord = await loadPreparation('RC10003');
     assert.equal(rejectedRecord.draft.documentReview.state, 'REJECTED');
     assert.ok(Object.values(completion(rejectedRecord.draft, rejectedRecord.photos)).every(Boolean));
     const editableRecord = { ...rejectedRecord, draft: reopenPreparation(rejectedRecord.draft, rejectedRecord.photos, '2026-10-19T09:00:00Z') };
     failWrite = true;
     await assert.rejects(savePreparation(editableRecord), /STORAGE_FULL/);
-    assert.equal((await loadPreparation('PREP03')).draft.documentReview.state, 'REJECTED');
-    assert.ok((await loadPreparation('PREP03')).draft.submittedAt, 'failed reopen cannot unlock stored submission');
+    assert.equal((await loadPreparation('RC10003')).draft.documentReview.state, 'REJECTED');
+    assert.ok((await loadPreparation('RC10003')).draft.submittedAt, 'failed reopen cannot unlock stored submission');
     failWrite = false;
     await savePreparation(editableRecord);
-    const resumed = await loadPreparation('PREP03');
+    const resumed = await loadPreparation('RC10003');
     assert.equal(resumed.draft.correctionStartedAt, '2026-10-19T09:00:00Z');
     assert.equal(resumed.draft.identityConfirmed, false);
     assert.equal(resumed.photos.length, rejectedRecord.photos.length);
@@ -116,82 +137,82 @@ try {
     const retrySubmission = { ...resumed, draft: submitDraft(resumed.draft, resumed.photos, '2026-10-19T09:05:00Z') };
     failWrite = true;
     await assert.rejects(savePreparation(retrySubmission), /STORAGE_FULL/);
-    assert.equal((await loadPreparation('PREP03')).draft.submittedAt, undefined, 'failed resubmission stays editable');
+    assert.equal((await loadPreparation('RC10003')).draft.submittedAt, undefined, 'failed resubmission stays editable');
     failWrite = false;
     await savePreparation(retrySubmission);
-    assert.equal((await loadPreparation('PREP03')).draft.documentReview.state, 'PENDING_ONSITE_CHECK');
-    assert.equal((await loadPreparation('PREP03')).draft.reviewHistory.length, 1);
+    assert.equal((await loadPreparation('RC10003')).draft.documentReview.state, 'PENDING_ONSITE_CHECK');
+    assert.equal((await loadPreparation('RC10003')).draft.reviewHistory.length, 1);
     const primary = await loadPreparation();
     primary.draft.bookingConfirmed = true;
     primary.draft.submittedAt = '2026-10-19T08:00:00Z';
     primary.photos = [{ id: 'primary-only', driverId: 'primary', kind: 'licence', page: 'front', name: 'sample.png', blob: new Blob(['primary'], { type: 'image/png' }) }];
     await savePreparation(primary);
-    const legacySecond = { draft: { ...newDraft('PREP02'), bookingConfirmed: true, submittedAt: '2026-10-19T08:00:00Z', identityConfirmed: true, confirmation: {}, drivers: [...newDraft('PREP02').drivers, newDriver('old-extra')] }, photos: primary.photos };
+    const legacySecond = { draft: { ...newDraft('RC10002'), bookingConfirmed: true, submittedAt: '2026-10-19T08:00:00Z', identityConfirmed: true, confirmation: {}, drivers: [...newDraft('RC10002').drivers, newDriver('old-extra')] }, photos: primary.photos };
     delete legacySecond.draft.demoResetRevision;
-    records.set('PREP02', structuredClone(legacySecond));
+    records.set('RC10002', structuredClone(legacySecond));
     failWrite = true;
-    await assert.rejects(() => loadPreparation('PREP02'), /STORAGE_FULL/, 'failed reset must not return an unpersisted success');
-    assert.equal(records.get('PREP02').draft.submittedAt, legacySecond.draft.submittedAt);
+    await assert.rejects(() => loadPreparation('RC10002'), /STORAGE_FULL/, 'failed reset must not return an unpersisted success');
+    assert.equal(records.get('RC10002').draft.submittedAt, legacySecond.draft.submittedAt);
     failWrite = false;
-    const second = await loadPreparation('PREP02');
-    assert.equal(second.draft.demoResetRevision, model.PREP02_RESET_REVISION);
+    const second = await loadPreparation('RC10002');
+    assert.equal(second.draft.demoResetRevision, model.RC10002_RESET_REVISION);
     assert.equal(second.draft.submittedAt, undefined);
     assert.equal(second.draft.confirmation, undefined);
     assert.equal(second.draft.identityConfirmed, undefined);
     assert.equal(second.draft.drivers.length, 1);
-    assert.equal(records.get('PREP02').photos.length, 0, 'reset must delete persisted old blobs');
+    assert.equal(records.get('RC10002').photos.length, 0, 'reset must delete persisted old blobs');
     assert.deepEqual(completion(second.draft, second.photos), { booking: false, drivers: true, documents: false, terms: false });
     assert.equal(second.photos.length, 0, 'new order must not inherit old photos');
     second.draft.bookingConfirmed = true;
     await savePreparation(second);
-    assert.equal((await loadPreparation('PREP02')).draft.bookingConfirmed, true, 'selected order restores its own progress');
-    assert.equal((await loadPreparation('PREP02')).draft.submittedAt, undefined);
-    const restoredPrimary = await loadPreparation('PREP01');
+    assert.equal((await loadPreparation('RC10002')).draft.bookingConfirmed, true, 'selected order restores its own progress');
+    assert.equal((await loadPreparation('RC10002')).draft.submittedAt, undefined);
+    const restoredPrimary = await loadPreparation('RC10001');
     assert.equal(restoredPrimary.draft.submittedAt, primary.draft.submittedAt);
     assert.equal(restoredPrimary.photos.length, 1);
     assert.equal(restoredPrimary.photos[0].blob.size, primary.photos[0].blob.size);
     failWrite = true;
     await assert.rejects(() => savePreparation({ ...second, draft: { ...second.draft, bookingConfirmed: false } }), /STORAGE_FULL/);
-    assert.equal((await loadPreparation('PREP02')).draft.bookingConfirmed, true, 'failed save keeps prior saved record');
+    assert.equal((await loadPreparation('RC10002')).draft.bookingConfirmed, true, 'failed save keeps prior saved record');
     failWrite = false;
-    const { savedPreparationLocks, prepareStepSubmission } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/stepLocks.ts');
-    let saved = await loadPreparation('PREP02');
+    const { savedPreparationLocks, prepareStepSubmission } = await server.ssrLoadModule('/src/app/customer-journey/stepLocks.ts');
+    let saved = await loadPreparation('RC10002');
     assert.equal(savedPreparationLocks(saved.draft, saved.photos).booking, false, 'reload preserves an editable checked draft');
     await savePreparation({ ...saved, draft: { ...saved.draft, bookingConfirmed: false } });
-    assert.equal((await loadPreparation('PREP02')).draft.bookingConfirmed, false, 'cancelling acknowledgement persists');
+    assert.equal((await loadPreparation('RC10002')).draft.bookingConfirmed, false, 'cancelling acknowledgement persists');
     await savePreparation(saved);
     const attempted = { ...saved, draft: prepareStepSubmission(saved.draft, saved.photos, 'booking') };
     failWrite = true;
     await assert.rejects(() => savePreparation(attempted), /STORAGE_FULL/);
-    saved = await loadPreparation('PREP02');
+    saved = await loadPreparation('RC10002');
     assert.equal(savedPreparationLocks(saved.draft, saved.photos).booking, false, 'failed explicit submission does not lock after refresh');
     failWrite = false;
     await savePreparation(attempted);
-    saved = await loadPreparation('PREP02');
+    saved = await loadPreparation('RC10002');
     assert.equal(savedPreparationLocks(saved.draft, saved.photos).booking, true, 'successful explicit submission restores locked state after refresh');
     const frozenTitle = saved.draft.contractConfigSnapshot.rentalGuidelines.attachments[0].title = 'Frozen configured notes';
     await savePreparation(saved);
-    assert.equal((await loadPreparation('PREP02')).draft.contractConfigSnapshot.rentalGuidelines.attachments[0].title, frozenTitle, 'loading cannot regenerate or replace the frozen order configuration');
+    assert.equal((await loadPreparation('RC10002')).draft.contractConfigSnapshot.rentalGuidelines.attachments[0].title, frozenTitle, 'loading cannot regenerate or replace the frozen order configuration');
     const legacyDraft = structuredClone(saved);
     delete legacyDraft.draft.configurationVersion;
     delete legacyDraft.draft.contractConfigSnapshot;
     await savePreparation(legacyDraft);
-    const migrated = await loadPreparation('PREP02');
+    const migrated = await loadPreparation('RC10002');
     assert.equal(migrated.draft.configurationVersion, 1);
     assert.ok(migrated.draft.contractConfigSnapshot);
     assert.equal(migrated.draft.bookingConfirmed, true, 'migration keeps entered information');
-    assert.ok(records.get('PREP02').draft.contractConfigSnapshot, 'migrated snapshot is persisted for future reloads');
+    assert.ok(records.get('RC10002').draft.contractConfigSnapshot, 'migrated snapshot is persisted for future reloads');
     await assert.rejects(() => loadPreparation('UNKNOWN'), /UNKNOWN_PREPARATION_ORDER/);
-    records.set('PREP02', { ...primary, draft: { ...primary.draft, demoResetRevision: model.PREP02_RESET_REVISION } });
-    await assert.rejects(() => loadPreparation('PREP02'), /INVALID_DRAFT/, 'mismatched record cannot become target order');
+    records.set('RC10002', { ...primary, draft: { ...primary.draft, demoResetRevision: model.RC10002_RESET_REVISION } });
+    await assert.rejects(() => loadPreparation('RC10002'), /INVALID_DRAFT/, 'mismatched record cannot become target order');
   } finally {
     if (originalIndexedDB === undefined) delete globalThis.indexedDB;
     else globalThis.indexedDB = originalIndexedDB;
   }
   const React = (await import('react')).default;
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const { PreparationVerification } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationVerification.tsx');
-  const { LanguageProvider } = await server.ssrLoadModule('/src/apps/selfservice-rental/contexts/LanguageContext.tsx');
+  const { PreparationVerification } = await server.ssrLoadModule('/src/modules/auth/PreparationVerification.tsx');
+  const { LanguageProvider } = await server.ssrLoadModule('/src/contexts/LanguageContext.tsx');
   const verificationProps = { reference: '', phoneLast4: '', onReferenceChange() {}, onPhoneLast4Change() {}, onSubmit() {}, loading: false, loadError: false, onRetry() {} };
   function renderVerification(language, patch = {}) {
     return renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationVerification, { ...verificationProps, ...patch })));
@@ -201,24 +222,30 @@ try {
     const copy = preparationTranslations[language];
     assert.ok(markup.includes(copy.prepServiceTitle));
     assert.ok(markup.includes(copy.prepViewJourney));
-    assert.ok(markup.includes(copy.prepEntryPreparationHint));
-    assert.ok(markup.includes(copy.prepEntryStatusHint));
+    assert.ok(markup.includes(copy.prepPortalBadge));
+    assert.ok(markup.includes(copy.prepEntryHelp));
+    assert.doesNotMatch(markup, /text-customer-body text-customer-text-secondary/, 'hero only renders the single approved headline');
+    assert.equal((markup.match(/<input /g) ?? []).length, 2, 'verification is a two-field task');
+    assert.equal((markup.match(/type="submit"/g) ?? []).length, 1);
+    assert.doesNotMatch(markup, /prep-capabilities-heading|aria-label="features"|⚡|📱|🔄/);
+    assert.ok(!markup.includes('IX RENTAL'));
+    assert.ok(!markup.includes('TRUST GO'));
     assert.ok(!markup.includes(copy.prepVerifyBenefitDocuments));
     assert.ok(markup.includes(copy.prepReferenceHint));
-    assert.ok(markup.includes(copy.prepPhoneLast4Hint));
     assert.ok(markup.includes(copy.prepPhoneLast4));
     assert.match(markup, /type="submit" disabled=""/);
   }
-  assert.doesNotMatch(renderVerification('zh-CN', { reference: 'NRT-PREP-001', phoneLast4: '5678' }), /type="submit" disabled=""/);
-  assert.match(renderVerification('zh-CN', { reference: '   ', phoneLast4: '5678' }), /type="submit" disabled=""/);
-  assert.match(renderVerification('zh-CN', { reference: 'NRT-PREP-001', phoneLast4: '5678', loading: true }), /type="submit" disabled=""/);
-  assert.match(renderVerification('zh-CN', { reference: 'NRT-PREP-001', phoneLast4: '5678', loadError: true }), /role="alert"/);
+  assert.doesNotMatch(renderVerification('zh-CN', { reference: 'NRT-PREP-001', phoneLast4: '8888' }), /type="submit" disabled=""/);
+  assert.match(renderVerification('zh-CN', { reference: '   ', phoneLast4: '8888' }), /type="submit" disabled=""/);
+  assert.match(renderVerification('zh-CN', { reference: 'NRT-PREP-001', phoneLast4: '8888', loading: true }), /type="submit" disabled=""/);
+  assert.match(renderVerification('zh-CN', { reference: 'NRT-PREP-001', phoneLast4: '8888', loadError: true }), /role="alert"/);
+  assert.match(renderVerification('zh-CN', { reference: 'RC10001', phoneLast4: '8888', loading: true }), /id="prep-booking-reference"[^>]*disabled=""/);
   assert.match(renderVerification('zh-CN', { error: preparationTranslations['zh-CN'].prepAuthError }), /aria-invalid="true"/);
-  const { PreparationTripSummary } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationTripSummary.tsx');
-  const { publishedTripAssignment } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PublishedPreparationTripSummary.tsx');
-  const originalVehicle = { status: 'ASSIGNED', model: 'Honda Stepwgn', plate: '成田330し110', fuelType: 'regular' };
-  const publishedVehicle = { status: 'ready', orderId: 'ORD-20260319-012', snapshot: { orderId: 'ORD-20260319-012', vehicle: { model: 'Honda Stepwgn', plate: '成田330し110' } } };
-  const resolveVehicle = state => publishedTripAssignment('ORD-20260319-012', state, originalVehicle);
+  const { PreparationTripSummary } = await server.ssrLoadModule('/src/modules/home/PreparationTripSummary.tsx');
+  const { publishedTripAssignment } = await server.ssrLoadModule('/src/modules/home/PublishedPreparationTripSummary.tsx');
+  const originalVehicle = { status: 'ASSIGNED', model: 'Honda Stepwgn', plate: '成田330し110', fuelType: 'regular', specs: { doors: 5, seats: 7, luggage: 4, transmission: 'automatic', airConditioning: true } };
+  const publishedVehicle = { status: 'ready', orderId: 'RC10014', snapshot: { orderId: 'RC10014', vehicle: { model: 'Honda Stepwgn', plate: '成田330し110' } } };
+  const resolveVehicle = state => publishedTripAssignment('RC10014', state, originalVehicle);
   assert.deepEqual(resolveVehicle(publishedVehicle), originalVehicle);
   const withPhoto = vehicleId => ({ ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, vehicleId: 'FLEET-110', groups: { exteriorAndDamage: { photos: [{ vehicleId, url: '/current-vehicle.jpg' }] } } } });
   assert.equal(resolveVehicle(withPhoto('FLEET-110')).imageUrl, undefined, 'inspection evidence is not a verified vehicle display image');
@@ -226,42 +253,57 @@ try {
 
   assert.deepEqual(resolveVehicle({ ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, vehicle: { ...publishedVehicle.snapshot.vehicle, model: 'Honda Stepwgn or similar' } } }), originalVehicle);
   assert.deepEqual(resolveVehicle({ ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, vehicle: { model: 'Toyota Prius', plate: 'NEW-PLATE' } } }), { status: 'ASSIGNED', model: 'Toyota Prius', plate: 'NEW-PLATE' });
-  assert.equal(resolveVehicle({ status: 'loading', orderId: 'ORD-20260319-012' }), undefined);
-  assert.equal(resolveVehicle({ status: 'error', orderId: 'ORD-20260319-012' }), undefined);
-  assert.equal(resolveVehicle({ ...publishedVehicle, orderId: 'PREP01' }), undefined);
-  assert.equal(resolveVehicle({ ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, orderId: 'PREP01' } }), undefined);
-  assert.deepEqual(resolveVehicle({ status: 'empty', orderId: 'ORD-20260319-012' }), originalVehicle);
+  assert.equal(resolveVehicle({ status: 'loading', orderId: 'RC10014' }), undefined);
+  assert.equal(resolveVehicle({ status: 'error', orderId: 'RC10014' }), undefined);
+  assert.equal(resolveVehicle({ ...publishedVehicle, orderId: 'RC10001' }), undefined);
+  assert.equal(resolveVehicle({ ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, orderId: 'RC10001' } }), undefined);
+  assert.deepEqual(resolveVehicle({ status: 'empty', orderId: 'RC10014' }), originalVehicle);
 
-  const currentAssignment = (await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/bookingFixtures.ts')).preparationBooking('ORD-20260319-012').vehicleAssignment;
-  const { DEFAULT_RENTAL_CAR_IMAGE } = await server.ssrLoadModule('/src/apps/selfservice-rental/utils/imageFallback.ts');
+  const currentAssignment = (await server.ssrLoadModule('/src/app/customer-journey/bookingFixtures.ts')).preparationBooking('RC10014').vehicleAssignment;
+  const { DEFAULT_RENTAL_CAR_IMAGE } = await server.ssrLoadModule('/src/utils/imageFallback.ts');
   assert.equal(currentAssignment.imageUrl, DEFAULT_RENTAL_CAR_IMAGE);
   assert.equal(currentAssignment.imageCredit, undefined);
   const photoAssignment = { ...currentAssignment, imageUrl: '/honda-stepwgn.jpg', imageCredit: { source: 'https://example.com/photo', author: 'Example', license: 'Example license' } };
   assert.ok(photoAssignment.imageUrl.includes('honda-stepwgn'));
-  assert.equal(publishedTripAssignment('ORD-20260319-012', publishedVehicle, photoAssignment).imageUrl, photoAssignment.imageUrl);
+  assert.equal(publishedTripAssignment('RC10014', publishedVehicle, photoAssignment).imageUrl, photoAssignment.imageUrl);
   const changedModel = { ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, vehicle: { model: 'Toyota Prius', plate: photoAssignment.plate } } };
-  assert.equal(publishedTripAssignment('ORD-20260319-012', changedModel, photoAssignment).imageUrl, undefined);
+  assert.equal(publishedTripAssignment('RC10014', changedModel, photoAssignment).imageUrl, undefined);
   const reservation = {
-    orderNumber: 'PREP01', confirmationCode: 'NRT-PREP-001',
-    rentalPeriod: { start: '2026-11-01 10:00 (JST)', end: '2026-11-04 10:00 (JST)', duration: '3' },
+    orderNumber: 'RC10001', confirmationCode: 'NRT-PREP-001',
+    rentalPeriod: { start: '2026-11-01 10:00', end: '2026-11-04 10:00', duration: '3' },
     pickupLocation: preparationTranslations['zh-CN'].prepStore,
     returnLocation: preparationTranslations['zh-CN'].prepStore,
     vehicle: { name: preparationTranslations['zh-CN'].prepGroup },
-    customer: { name: 'Alex Smith', phone: '+819012345678', email: 'alex.smith@example.com' },
+    customer: { name: 'Alex Smith', phone: '+819012348888', email: 'alex.smith@example.com' },
   };
   const summaryMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Toyota Yaris', onDetails() {} })));
-  for (const value of ['PREP01', 'Toyota Yaris', '2026-11-01 10:00 (JST)', '2026-11-04 10:00 (JST)', preparationTranslations['zh-CN'].prepViewTripDetails]) assert.ok(summaryMarkup.includes(value));
+  for (const value of ['RC10001', 'Toyota Yaris', '2026-11-01 10:00', '2026-11-04 10:00', preparationTranslations['zh-CN'].prepLocalTimeBasis]) assert.ok(summaryMarkup.includes(value));
+  assert.ok(!summaryMarkup.includes('(JST)'));
   assert.match(summaryMarkup, /type="button"/);
+  assert.ok(summaryMarkup.includes(`aria-label="${preparationTranslations['zh-CN'].prepViewTripDetails} RC10001"`));
+  assert.equal(summaryMarkup.match(new RegExp(preparationTranslations['zh-CN'].prepViewTripDetails, 'g'))?.length, 1);
   assert.ok(summaryMarkup.indexOf('Alex Smith') < summaryMarkup.indexOf('Toyota Yaris'));
-  assert.ok(summaryMarkup.includes('+819012345678'));
-  const assignedMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Toyota Yaris', vehicleAssignment: { status: 'ASSIGNED', model: 'Toyota Yaris', plate: '成田330あ1234', fuelType: 'regular' }, onDetails() {} })));
+  assert.ok(summaryMarkup.includes('+819012348888'));
+  assert.ok(!summaryMarkup.includes('IX RENTAL'));
+  assert.ok(!summaryMarkup.includes('TRUST GO'));
+  assert.ok(!summaryMarkup.includes('原租期'));
+  assert.ok(summaryMarkup.includes('租期'));
+  assert.ok(summaryMarkup.includes(`aria-label="${preparationTranslations['zh-CN'].prepCopyOrderNumber}"`));
+  const assignedMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Toyota Harrier', vehicleAssignment: { status: 'ASSIGNED', model: 'Toyota Harrier', plate: '成田330あ1234', fuelType: 'regular', specs: { doors: 5, seats: 5, luggage: 3, transmission: 'automatic', airConditioning: true } }, onDetails() {} })));
   assert.ok(!assignedMarkup.includes(preparationTranslations['zh-CN'].prepAssignedVehicle));
   assert.ok(assignedMarkup.includes('成田330あ1234'));
   assert.ok(assignedMarkup.includes(preparationTranslations['zh-CN'].prepFuelTypeRegular));
+  assert.ok(!assignedMarkup.includes(`${preparationTranslations['zh-CN'].prepVehicleFuel}：`));
+  for (const spec of ['doors', 'luggage', 'transmission']) assert.ok(assignedMarkup.includes(`data-vehicle-spec="${spec}"`));
+  for (const spec of ['seats', 'air-conditioning']) assert.ok(!assignedMarkup.includes(`data-vehicle-spec="${spec}"`));
+  for (const value of ['5门', '3件', preparationTranslations['zh-CN'].prepAutomatic]) assert.ok(assignedMarkup.includes(value));
+  assert.ok(!assignedMarkup.includes('3件行李'));
+  for (const value of ['5座', preparationTranslations['zh-CN'].prepAirConditioning]) assert.ok(!assignedMarkup.includes(value));
   const missingFuelMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Toyota Yaris', vehicleAssignment: { status: 'ASSIGNED', model: 'Toyota Yaris', plate: 'NEW-PLATE' }, onDetails() {} })));
-  assert.ok(missingFuelMarkup.includes('油品'));
+  assert.ok(!missingFuelMarkup.includes(preparationTranslations['zh-CN'].prepVehicleFuel));
   assert.ok(missingFuelMarkup.includes(preparationTranslations['zh-CN'].prepInspectionMissing));
   assert.ok(!missingFuelMarkup.includes('data-fuel-sign'));
+  assert.ok(!missingFuelMarkup.includes('data-vehicle-spec'));
   const unassignedMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Toyota Yaris', vehicleAssignment: { status: 'UNASSIGNED' }, onDetails() {} })));
   assert.ok(unassignedMarkup.includes(preparationTranslations['zh-CN'].prepVehicleUnassigned));
   assert.doesNotMatch(unassignedMarkup, /成田330あ1234|普通汽油|油品/);
@@ -277,7 +319,7 @@ try {
       const markup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Toyota Yaris', vehicleAssignment: { status: 'ASSIGNED', model: 'Toyota Yaris', plate: '成田330あ1234', fuelType }, onDetails() {} })));
       assert.ok(markup.includes(preparationTranslations[language][label]));
       if (asset) {
-        const { default: signSource } = await server.ssrLoadModule(`/src/apps/selfservice-rental/assets/fuel-signs/${asset}`);
+        const { default: signSource } = await server.ssrLoadModule(`/src/assets/fuel-signs/${asset}`);
         const expectedImage = renderToStaticMarkup(React.createElement('img', { src: signSource, alt: preparationTranslations[language][label] }));
         const expectedSource = expectedImage.match(/<img src="([^"]+)"/)[1];
         assert.ok(markup.includes(`src="${expectedSource}"`), `${fuelType} uses its own fuel sign`);
@@ -293,17 +335,18 @@ try {
     assert.ok(markup.includes('成田330あ1234'));
   }
 
-  const { identityDeadlinePassed } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/identityDeadline.ts');
+  const { identityDeadlinePassed } = await server.ssrLoadModule('/src/modules/online-checkin/identityDeadline.ts');
   const cutoff = Date.parse('2026-11-01T06:00:00+09:00');
-  assert.equal(identityDeadlinePassed('PREP01', cutoff - 1), false);
-  assert.equal(identityDeadlinePassed('PREP01', cutoff), false);
-  assert.equal(identityDeadlinePassed('PREP01', cutoff + 1), true);
-  assert.equal(identityDeadlinePassed('PREP01', Date.parse('2026-10-31T21:00:00Z')), false);
-  assert.throws(() => model.submitIdentityDraft(newDraft('PREP01'), [], '2026-11-01T06:00:00.001+09:00'), /IDENTITY_DEADLINE_PASSED/);
-  const { PreparationServiceEntriesContent: PreparationServiceEntries } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationServiceEntries.tsx');
-  const { preparationServiceBlockReason } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/servicePresentation.ts');
-  const { PreparationServiceDialogContent } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationServiceDialog.tsx');
-  const availableServiceState = { busy: false, identityClosed: false, pickupReady: true, rentalActive: true, pickupState: 'ready' };
+  assert.equal(identityDeadlinePassed('RC10001', cutoff - 1), false);
+  assert.equal(identityDeadlinePassed('RC10001', cutoff), false);
+  assert.equal(identityDeadlinePassed('RC10001', cutoff + 1), true);
+  assert.equal(identityDeadlinePassed('RC10001', Date.parse('2026-10-31T21:00:00Z')), false);
+  assert.throws(() => model.submitIdentityDraft(newDraft('RC10001'), [], '2026-11-01T06:00:00.001+09:00'), /IDENTITY_DEADLINE_PASSED/);
+  const { PreparationServiceEntriesContent: PreparationServiceEntries } = await server.ssrLoadModule('/src/modules/home/PreparationServiceEntries.tsx');
+  const { CUSTOMER_FEEDBACK_URL } = await server.ssrLoadModule('/src/config/feedback.ts');
+  const { preparationServiceBlockReason } = await server.ssrLoadModule('/src/app/customer-journey/servicePresentation.ts');
+  const { PreparationServiceDialogContent } = await server.ssrLoadModule('/src/app/customer-journey/PreparationServiceDialog.tsx');
+  const availableServiceState = { busy: false, identityClosed: false, pickupReady: true, rentalActive: true, pickupState: 'ready', rentalMode: 'regular' };
   for (const service of ['identity', 'pickup', 'renewal']) {
     assert.equal(preparationServiceBlockReason(service, availableServiceState), undefined);
     assert.equal(preparationServiceBlockReason(service, { ...availableServiceState, busy: true }), 'prepServiceBusy');
@@ -311,6 +354,10 @@ try {
   assert.equal(preparationServiceBlockReason('identity', { ...availableServiceState, identityClosed: true }), 'prepIdentityExpired');
   assert.equal(preparationServiceBlockReason('identity', { ...availableServiceState, identityClosed: true, identityReason: 'prepIdentityDemoClosed' }), 'prepIdentityDemoClosed');
   assert.equal(preparationServiceBlockReason('renewal', { ...availableServiceState, rentalActive: false }), 'prepRenewalWaitingHint');
+  assert.equal(preparationServiceBlockReason('selfservice', availableServiceState), 'prepSelfserviceOrderOnly');
+  assert.equal(preparationServiceBlockReason('selfservice', { ...availableServiceState, rentalMode: 'selfservice' }), undefined);
+  assert.equal(preparationServiceBlockReason('pickup', { ...availableServiceState, rentalMode: 'selfservice' }), 'prepQuickPickupRegularOnly');
+  assert.equal(preparationServiceBlockReason('more', availableServiceState), 'prepMoreAppsPlanned');
   for (const [pickupState, expected] of [['loading', 'prepLoading'], ['error', 'prepInspectionLoadError'], ['empty', 'prepPickupWaitingHint']]) {
     assert.equal(preparationServiceBlockReason('pickup', { ...availableServiceState, pickupReady: false, pickupState }), expected);
   }
@@ -320,6 +367,8 @@ try {
       ['prepIdentityTileTitle', 'prepIdentityExpired'], ['prepPickupTileTitle', 'prepLoading'],
       ['prepPickupTileTitle', 'prepPickupWaitingHint'], ['prepPickupTileTitle', 'prepInspectionLoadError'],
       ['prepRenewal', 'prepRenewalWaitingHint'], ['prepIdentityTileTitle', 'prepServiceBusy'],
+      ['prepSelfserviceTitle', 'prepSelfserviceOrderOnly'], ['prepPickupTileTitle', 'prepQuickPickupRegularOnly'],
+      ['prepMoreAppsTitle', 'prepMoreAppsPlanned'],
     ]) {
       const retry = reason === 'prepInspectionLoadError';
       const markup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceDialogContent, { title, reason, onClose() {}, onRetry: retry ? () => {} : undefined })));
@@ -332,60 +381,70 @@ try {
     }
   }
   for (const language of Object.keys(preparationTranslations)) {
-    const servicesMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceEntries, { draft: newDraft('PREP02'), hasPreparation: false, pickupReady: true, rentalActive: true, phone: '+81 50 0000 0000', onIdentity() {}, onInspection() {}, onNotices() {} })));
+    const servicesMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceEntries, { draft: newDraft('RC10002'), hasPreparation: false, rentalMode: 'regular', pickupReady: true, rentalActive: true, phone: '+81 50 0000 0000', onIdentity() {}, onInspection() {}, onNotices() {} })));
     assert.ok(!servicesMarkup.includes(preparationTranslations[language].prepIdentityDeadline));
     assert.ok(!servicesMarkup.includes('data-preparation-service="notices"'));
     assert.ok(!servicesMarkup.includes(preparationTranslations[language].prepQuickPickupHint));
-    for (const key of ['prepSelfServices', 'prepIdentityTileTitle', 'prepPickupTileTitle', 'prepRenewal', 'prepFeedbackTitle']) assert.ok(servicesMarkup.includes(preparationTranslations[language][key]));
-    assert.match(servicesMarkup, /href="tel:\+815000000000"/);
-    assert.equal((servicesMarkup.match(/<article /g) || []).length, 4);
+    for (const key of ['prepSelfServices', 'prepIdentityTileTitle', 'prepPickupTileTitle', 'prepSelfserviceTitle', 'prepRenewal', 'prepFeedbackTitle', 'prepMoreAppsTitle']) assert.ok(servicesMarkup.includes(preparationTranslations[language][key]));
+    assert.doesNotMatch(servicesMarkup, /href="tel:/);
+    assert.equal((servicesMarkup.match(/<article /g) || []).length, 6);
+    assert.ok(servicesMarkup.includes('grid-cols-3'));
     const serviceOrder = [...servicesMarkup.matchAll(/data-preparation-service="([^"]+)"/g)].map(match => match[1]);
-    assert.deepEqual(serviceOrder, ['identity', 'pickup', 'renewal', 'feedback']);
-    assert.ok(servicesMarkup.includes(preparationTranslations[language].prepFeedbackTitle));
+    assert.deepEqual(serviceOrder, ['identity', 'pickup', 'selfservice', 'renewal', 'feedback', 'more']);
+    const feedback = servicesMarkup.split('<article').find(part => part.includes('data-preparation-service="feedback"'));
+    assert.ok(feedback.includes(`<a href="${CUSTOMER_FEEDBACK_URL}"`));
+    assert.ok(feedback.includes('target="_blank"'));
+    assert.ok(feedback.includes('rel="noopener noreferrer"'));
+    assert.ok(feedback.includes('lucide-message-square'));
+    assert.ok(feedback.includes(`aria-label="${preparationTranslations[language].prepFeedbackAction}"`));
     assert.ok(!servicesMarkup.includes(preparationTranslations[language].prepFeedbackSummary));
     assert.ok(!servicesMarkup.includes(preparationTranslations[language].prepRenewalSummary));
-    assert.ok(servicesMarkup.includes('target="_blank"'));
-    assert.ok(servicesMarkup.includes('rel="noopener noreferrer"'));
     const renewal = servicesMarkup.split('<article').find(part => part.includes('data-preparation-service="renewal"'));
     assert.ok(!renewal.includes('lucide-chevron-right'));
     assert.ok(!renewal.includes('lucide-phone'));
+    const selfservice = servicesMarkup.split('<article').find(part => part.includes('data-preparation-service="selfservice"'));
+    assert.ok(selfservice.includes('aria-haspopup="dialog"'), 'regular rental explains why self-service is unavailable');
 
     assert.ok(servicesMarkup.includes(preparationTranslations[language].prepIdentityTileTitle));
     assert.ok(!servicesMarkup.includes('step=inspection'));
   }
-  const xhsIdentityMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationServiceEntries, { draft: newDraft('ORD-20260319-012'), hasPreparation: false, phone: '+81 50 0000 0000', onIdentity() {} })));
+  const xhsIdentityMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationServiceEntries, { draft: newDraft('RC10014'), hasPreparation: false, phone: '+81 50 0000 0000', onIdentity() {} })));
   const xhsIdentityTile = xhsIdentityMarkup.split('<article').find(part => part.includes('data-preparation-service="identity"'));
   assert.ok(xhsIdentityTile?.includes('aria-haspopup="dialog"'), 'XHS local demo identity entry remains clickable while styled unavailable');
   const identityDemoExplanation = preparationTranslations['zh-CN'].prepIdentityDemoClosed;
   assert.ok(!xhsIdentityMarkup.includes(`>${identityDemoExplanation}<`), 'demo-only explanation is not rendered as standalone homepage text; the deadline notice may share its prefix');
   for (const language of Object.keys(preparationTranslations)) {
-    const locked = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceEntries, { draft: newDraft('PREP02'), hasPreparation: false, phone: '+81 50 0000 0000', onIdentity() {}, onPickup() {} })));
-    assert.equal((locked.match(/aria-haspopup="dialog"/g) || []).length, 2);
+    const locked = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceEntries, { draft: newDraft('RC10002'), hasPreparation: false, phone: '+81 50 0000 0000', onIdentity() {}, onPickup() {} })));
+    assert.equal((locked.match(/aria-haspopup="dialog"/g) || []).length, 4);
     assert.doesNotMatch(locked, /\s(?:disabled|aria-disabled)=|cursor-not-allowed/);
     assert.ok(!locked.includes('href="tel:'));
-    assert.ok(locked.includes('target="_blank"'));
+    const renewal = locked.split('<article').find(part => part.includes('data-preparation-service="renewal"'));
+    assert.ok(renewal.includes('<button'));
+    assert.ok(renewal.includes('aria-haspopup="dialog"'), 'a not-yet-active rental explains why renewal is unavailable');
     const feedback = locked.split('<article').find(part => part.includes('data-preparation-service="feedback"'));
-    assert.ok(feedback.includes('href="https://docs.google.com/forms/'));
-    assert.ok(!feedback.includes('aria-disabled'));
+    assert.ok(feedback.includes(`<a href="${CUSTOMER_FEEDBACK_URL}"`), 'feedback remains available before the rental starts');
     assert.ok(!locked.includes(preparationTranslations[language].prepPickupUnavailable));
     assert.ok(!locked.includes(preparationTranslations[language].prepRentalServicesGate));
   }
   for (const rentalActive of [false, true]) {
     for (let visit = 0; visit < 2; visit++) {
-      const markup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationServiceEntries, { draft: newDraft('PREP02'), hasPreparation: false, disabled: true, rentalActive, phone: '', onIdentity() {}, onPickup() {} })));
+      const markup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationServiceEntries, { draft: newDraft('RC10002'), hasPreparation: false, disabled: true, rentalActive, phone: '', onIdentity() {}, onPickup() {} })));
+      assert.equal((markup.match(/<article /g) || []).length, 6);
       const feedback = markup.split('<article').find(part => part.includes('data-preparation-service="feedback"'));
-      assert.ok(feedback.includes('href="https://docs.google.com/forms/'), 'feedback stays open during other work and repeated visits');
-      assert.ok(!feedback.includes('aria-disabled'));
+      assert.ok(feedback.includes('<button'), 'busy feedback entry is rendered but cannot navigate');
+      assert.ok(!feedback.includes(CUSTOMER_FEEDBACK_URL));
+      const renewal = markup.split('<article').find(part => part.includes('data-preparation-service="renewal"'));
+      assert.ok(renewal.includes('aria-haspopup="dialog"'), 'busy renewal entry explains its unavailable state');
     }
   }
-  const { identityServicePresentation } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/servicePresentation.ts');
-  const { rentalServicesAvailable } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/servicePresentation.ts');
-  assert.equal(rentalServicesAvailable('PREP02', null), false);
-  for (const status of [undefined, 'PENDING', 'RETURNED', 'CANCELLED']) assert.equal(rentalServicesAvailable('PREP02', { orderId: 'PREP02', orderLifecycleStatus: status }), false);
-  assert.equal(rentalServicesAvailable('PREP02', { orderId: 'PREP01', orderLifecycleStatus: 'PICKED_UP' }), false);
-  assert.equal(rentalServicesAvailable('PREP02', { orderId: 'PREP02', orderLifecycleStatus: 'PICKED_UP' }, false), false);
-  assert.equal(rentalServicesAvailable('PREP02', { orderId: 'PREP02', orderLifecycleStatus: 'PICKED_UP' }), true);
-  const serviceDraft = newDraft('PREP02');
+  const { identityServicePresentation } = await server.ssrLoadModule('/src/app/customer-journey/servicePresentation.ts');
+  const { rentalServicesAvailable } = await server.ssrLoadModule('/src/app/customer-journey/servicePresentation.ts');
+  assert.equal(rentalServicesAvailable('RC10002', null), false);
+  for (const status of [undefined, 'PENDING', 'RETURNED', 'CANCELLED']) assert.equal(rentalServicesAvailable('RC10002', { orderId: 'RC10002', orderLifecycleStatus: status }), false);
+  assert.equal(rentalServicesAvailable('RC10002', { orderId: 'RC10001', orderLifecycleStatus: 'PICKED_UP' }), false);
+  assert.equal(rentalServicesAvailable('RC10002', { orderId: 'RC10002', orderLifecycleStatus: 'PICKED_UP' }, false), false);
+  assert.equal(rentalServicesAvailable('RC10002', { orderId: 'RC10002', orderLifecycleStatus: 'PICKED_UP' }), true);
+  const serviceDraft = newDraft('RC10002');
   assert.equal(identityServicePresentation(serviceDraft, false).status, 'prepServiceNotStarted', 'prefilled contact details are not preparation progress');
   assert.equal(identityServicePresentation(serviceDraft, true).status, 'prepServiceDraft');
   const serviceSubmitted = { ...serviceDraft, submittedAt: '2026-10-20T01:00:00Z' };
@@ -405,22 +464,22 @@ try {
   const photoSummary = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Honda Stepwgn', vehicleAssignment: photoAssignment, onDetails() {} })));
   assert.ok(!photoSummary.includes(photoAssignment.imageCredit.source), 'homepage has no image credit link');
   assert.ok(photoSummary.indexOf(photoAssignment.plate) < photoSummary.indexOf('data-fuel-sign'), 'fuel follows the plate');
-  const { default: ReservationDetailsScreen } = await server.ssrLoadModule('/src/apps/selfservice-rental/components/ReservationDetailsScreen.tsx');
-  const { PreparationExtras } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationExtras.tsx');
-  const { PreparationInsurance } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationInsurance.tsx');
+  const { default: ReservationDetailsScreen } = await server.ssrLoadModule('/src/components/ReservationDetailsScreen.tsx');
+  const { PreparationExtras } = await server.ssrLoadModule('/src/modules/home/PreparationExtras.tsx');
+  const { PreparationInsurance } = await server.ssrLoadModule('/src/modules/home/PreparationInsurance.tsx');
   const detailsMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(React.Fragment, null,
-    React.createElement(ReservationDetailsScreen, { embedded: true, orderDetails: reservation, setView() {}, afterBookingInfo: React.createElement(React.Fragment, null, React.createElement(PreparationExtras, { items: (await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/bookingFixtures.ts')).preparationBooking('PREP01').extras }), React.createElement(PreparationInsurance, { planKey: 'prepBasicInsurance' })) }))));
-  for (const value of ['NRT-PREP-001', 'Toyota Yaris', preparationTranslations['zh-CN'].prepExtras, preparationTranslations['zh-CN'].prepInsurance, 'Alex Smith', '+819012345678']) assert.ok(detailsMarkup.includes(value));
+    React.createElement(ReservationDetailsScreen, { embedded: true, orderDetails: reservation, setView() {}, afterBookingInfo: React.createElement(React.Fragment, null, React.createElement(PreparationExtras, { items: (await server.ssrLoadModule('/src/app/customer-journey/bookingFixtures.ts')).preparationBooking('RC10001').extras }), React.createElement(PreparationInsurance, { planKey: 'prepBasicInsurance' })) }))));
+  for (const value of ['NRT-PREP-001', 'Toyota Yaris', preparationTranslations['zh-CN'].prepExtras, preparationTranslations['zh-CN'].prepInsurance, 'Alex Smith', '+819012348888']) assert.ok(detailsMarkup.includes(value));
   assert.doesNotMatch(detailsMarkup, /tel:|\+81 50 0000 0000/);
   assert.doesNotMatch(detailsMarkup, /type="checkbox"/);
-  const { TripVehicleContent } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationTripVehicle.tsx');
+  const { TripVehicleContent } = await server.ssrLoadModule('/src/modules/home/PreparationTripVehicle.tsx');
   const photoDetails = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(TripVehicleContent, { state: { ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, groups: {} } }, assignment: photoAssignment, onRetry() {} })));
   assert.ok(photoDetails.includes(photoAssignment.imageCredit.source), 'details preserve source attribution');
   assert.ok(photoDetails.includes(photoAssignment.imageCredit.author));
-  const { loadPublishedInspection: loadTripVehicle } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/inspection/fixtures.ts');
-  const tripSnapshot = await loadTripVehicle('PREP01');
+  const { loadPublishedInspection: loadTripVehicle } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/fixtures.ts');
+  const tripSnapshot = await loadTripVehicle('RC10001');
   for (const language of Object.keys(preparationTranslations)) {
-    const vehicleCard = React.createElement(TripVehicleContent, { state: {status:'ready',orderId:'PREP01',snapshot:tripSnapshot},onRetry() {} });
+    const vehicleCard = React.createElement(TripVehicleContent, { state: {status:'ready',orderId:'RC10001',snapshot:tripSnapshot},onRetry() {} });
     const markup = renderToStaticMarkup(React.createElement(LanguageProvider, {initialLang:language},
       React.createElement(ReservationDetailsScreen, {embedded:true, customerInfoFirst:true, beforeBookingInfo:vehicleCard,
         orderDetails:reservation,setView() {},afterBookingInfo:React.createElement(PreparationInsurance,{planKey:'prepBasicInsurance'})})));
@@ -431,16 +490,16 @@ try {
     assert.doesNotMatch(markup, /prepInspectionVehicle|prepInspectionPlate|prepInspectionModel/);
     for (const status of ['loading','empty','error']) {
       const stateMarkup = renderToStaticMarkup(React.createElement(LanguageProvider,{initialLang:language},
-        React.createElement(TripVehicleContent,{state:{status,orderId:'PREP01'},onRetry() {}})));
+        React.createElement(TripVehicleContent,{state:{status,orderId:'RC10001'},onRetry() {}})));
       assert.ok(stateMarkup.includes(preparationTranslations[language][status === 'loading' ? 'prepLoading' : status === 'error' ? 'prepInspectionLoadError' : 'prepInspectionEmpty']));
       assert.equal(stateMarkup.includes('<button'),status === 'error');
     }
   }
   assert.ok(detailsMarkup.indexOf('NRT-PREP-001') < detailsMarkup.indexOf('Alex Smith'), 'default shared detail layout retains original order');
-  const { preparationPrimaryLabel } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/primaryAction.ts');
+  const { preparationPrimaryLabel } = await server.ssrLoadModule('/src/app/customer-journey/primaryAction.ts');
   const noSteps = { booking: false, drivers: false, terms: false };
   const allSteps = { booking: true, drivers: true, terms: true };
-  const { requiredPreparationStep } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/stepAdmission.ts');
+  const { requiredPreparationStep } = await server.ssrLoadModule('/src/app/customer-journey/stepAdmission.ts');
   assert.equal(requiredPreparationStep('booking', noSteps), null);
   assert.equal(requiredPreparationStep('details', noSteps), null);
   assert.equal(requiredPreparationStep('notices', noSteps), null, 'standalone materials do not require document submission');
@@ -463,8 +522,8 @@ try {
   assert.equal(preparationPrimaryLabel('home', allSteps, false, false), 'prepSubmit');
   assert.equal(preparationPrimaryLabel('home', noSteps, false, false), 'prepStart');
   assert.equal(preparationPrimaryLabel('home', { ...noSteps, booking: true }, false, false), 'prepContinue');
-  const { savedPreparationLocks, canEditPreparationPatch, prepareStepSubmission } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/stepLocks.ts');
-  const { PreparationStepProgress } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationStepProgress.tsx');
+  const { savedPreparationLocks, canEditPreparationPatch, prepareStepSubmission } = await server.ssrLoadModule('/src/app/customer-journey/stepLocks.ts');
+  const { PreparationStepProgress } = await server.ssrLoadModule('/src/app/customer-journey/PreparationStepProgress.tsx');
   for (const language of Object.keys(preparationTranslations)) {
     for (const [completed, allowed] of [
       [noSteps, [true, true, true]],
@@ -503,7 +562,7 @@ try {
   assert.throws(() => submitDraft(draft, [], new Date().toISOString()), /PREPARATION_INCOMPLETE/);
   assert.equal(validDrivers(draft.drivers), true);
   assert.equal(validDrivers([{ ...draft.drivers[0], email: '', phone: '' }]), false);
-  assert.equal(validDrivers([{ ...draft.drivers[0], email: '', phone: '+819012345678' }]), true);
+  assert.equal(validDrivers([{ ...draft.drivers[0], email: '', phone: '+819012348888' }]), true);
   assert.equal(validDrivers([{ ...draft.drivers[0], phone: '', email: 'a@b.com' }]), true);
   assert.equal(validDrivers([{ ...draft.drivers[0], phone: '123', email: 'a@b.com' }]), false);
   assert.equal(validDrivers([draft.drivers[0], newDriver('additional-1')]), true);
@@ -525,13 +584,13 @@ try {
   assert.equal(completion({ ...draft, submittedAt: '2026-10-19T08:00:00Z', documentLayoutVersion: undefined }, photos.map(({ page, ...photo }) => photo)).documents, true, 'historical submitted requirements remain frozen');
   const localDraft = { ...draft, drivers: [{ ...draft.drivers[0], mode: 'local' }] };
   assert.equal(completion(localDraft, photos.filter(photo => photo.kind === 'licence')).documents, true);
-  const { splitPhone } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/documentSlots.ts');
+  const { splitPhone } = await server.ssrLoadModule('/src/modules/online-checkin/documentSlots.ts');
   assert.deepEqual(splitPhone('+81 90-1234-5678'), { code: '+81', number: '9012345678' });
   assert.deepEqual(splitPhone('+85291234567'), { code: '+852', number: '91234567' });
   assert.deepEqual(splitPhone('', '+86'), { code: '+86', number: '' });
   assert.equal(completion({ ...draft, drivers: [...draft.drivers, newDriver('extra')] }, photos).documents, false, 'primary photos must not satisfy another driver');
   assert.equal(completion(draft, photos.filter(photo => photo.kind !== 'idp')).documents, false);
-  const { PreparationTerms } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationTerms.tsx');
+  const { PreparationTerms } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/PreparationTerms.tsx');
   const allKeys = Object.keys(preparationTranslations.en).sort();
   for (const [language, texts] of Object.entries(preparationTranslations)) {
     assert.deepEqual(Object.keys(texts).sort(), allKeys);
@@ -545,11 +604,11 @@ try {
       confirmation = updateRentalMaterialConfirmation({ resolution, currentRecord: confirmation, materialGroup: group.materialGroup, confirmed: true });
     }
     const ready = { ...draft, language, bookingConfirmed: true, identityConfirmed: true, confirmation };
-    const noticesOnly = { ...newDraft('PREP02'), contractConfigSnapshot: snapshot, language, confirmation };
+    const noticesOnly = { ...newDraft('RC10002'), contractConfigSnapshot: snapshot, language, confirmation };
     assert.equal(preparationTermsComplete(noticesOnly), true);
     assert.equal(canSubmit(noticesOnly, []), false, 'advance acknowledgements cannot replace booking or driver documents');
     assert.equal(noticesOnly.submittedAt, undefined);
-    assert.equal(newDraft('PREP01').confirmation, undefined, 'another order does not inherit acknowledgements');
+    assert.equal(newDraft('RC10001').confirmation, undefined, 'another order does not inherit acknowledgements');
     const noticesMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceEntries, { draft: noticesOnly, hasPreparation: false, phone: '+81 50 0000 0000', onIdentity() {}, onInspection() {}, onNotices() {} })));
     assert.ok(!noticesMarkup.includes('data-preparation-service="notices"'));
     assert.ok(!noticesMarkup.includes(texts.prepPickupUnavailable));
@@ -596,7 +655,7 @@ try {
     assert.throws(() => submitDraft(submitted, photos, '2026-10-19T08:01:00Z'), /PREPARATION_INCOMPLETE/, 'repeat submission is blocked');
     assert.equal('canonical_status' in submitted, false);
   }
-  const { reopenPreparation, isPreparationCorrection, preparationReviewIssues, preparationDriverStepLabel } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/review.ts');
+  const { reopenPreparation, isPreparationCorrection, preparationReviewIssues, preparationDriverStepLabel } = await server.ssrLoadModule('/src/modules/online-checkin/review.ts');
   assert.equal(preparationDriverStepLabel({}, false), 'prepTodo');
   assert.equal(preparationDriverStepLabel({}, true), 'prepCompleted');
   assert.equal(preparationDriverStepLabel({ submittedAt: '2026-10-19T08:00:00Z' }, true), 'prepSubmitted', 'legacy submission displays submitted without rewriting its review fact');
@@ -604,10 +663,10 @@ try {
     assert.equal(preparationDriverStepLabel({ submittedAt: '2026-10-19T08:00:00Z', documentReview: { state } }, true), label);
   }
   assert.equal(preparationDriverStepLabel({ documentReview: { state: 'REJECTED' }, correctionStartedAt: '2026-10-19T09:00:00Z' }, false), 'prepStepRejected', 'editing retains the rejection until resubmission');
-  const { rejectedPreparationFixture } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/reviewFixture.ts');
-  const { PreparationReviewStatus } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationReviewStatus.tsx');
+  const { rejectedPreparationFixture } = await server.ssrLoadModule('/src/modules/online-checkin/reviewFixture.ts');
+  const { PreparationReviewStatus } = await server.ssrLoadModule('/src/modules/online-checkin/PreparationReviewStatus.tsx');
   const rejected = rejectedPreparationFixture();
-  const { PreparationDrivers } = await server.ssrLoadModule('/src/apps/selfservice-rental/modules/pickup-preparation/PreparationDrivers.tsx');
+  const { PreparationDrivers } = await server.ssrLoadModule('/src/modules/online-checkin/PreparationDrivers.tsx');
   for (const language of Object.keys(preparationTranslations)) {
     for (const readOnly of [false, true]) {
       const markup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationDrivers, {
@@ -633,7 +692,7 @@ try {
   assert.deepEqual(preparationReviewIssues({ state: 'REJECTED', rejectionReasonKey: 'prepReviewSampleReason' }).map(item => item.type), ['licence'], 'existing demo records work without resets');
   assert.deepEqual(preparationReviewIssues({ state: 'REJECTED', rejectedDocumentTypes: [], rejectionReasonKey: 'prepReviewSampleReason' }), [], 'explicit empty list wins over legacy fixture fallback');
   assert.deepEqual(preparationReviewIssues({ state: 'REJECTED', rejectedDocumentTypes: 'licence' }), [], 'malformed payload safely falls back');
-  assert.equal(findPreparationBooking('prep03', '5678')?.orderId, 'PREP03');
+  assert.equal(findPreparationBooking('RC10003', '8888')?.orderId, 'RC10003');
   assert.deepEqual(savedPreparationLocks(rejected.draft, rejected.photos), { ...allSteps, terms: false });
   const correction = reopenPreparation(rejected.draft, rejected.photos, '2026-10-19T10:00:00Z');
   assert.equal(isPreparationCorrection(correction), true);
@@ -711,8 +770,8 @@ try {
     }
     assert.ok(renderReview({ ...resubmitted, documentReview: { state: 'APPROVED' } }).includes(texts.prepReviewApproved));
     assert.ok(renderReview({ ...resubmitted, documentReview: undefined }).includes(texts.prepSubmitted), 'legacy submission prompts onsite verification');
-    assert.equal(renderReview(newDraft('PREP02')), '');
+    assert.equal(renderReview(newDraft('RC10002')), '');
   }
   console.log('Review correction: rejected fixture, reopen and resubmission persistence/failures, required documents, preserved confirmations/history, locked fields, duplicate submission and six-language status rendering passed.');
-  console.log('Pickup preparation: untouched PREP02 fixture, order storage isolation and recovery, verification entry, credentials, 6-language verification rendering, validation, driver isolation, document requirements, 6 languages, confirmation revisions and idempotent submission passed.');
+  console.log('Pickup preparation: untouched RC10002 fixture, order storage isolation and recovery, verification entry, credentials, 6-language verification rendering, validation, driver isolation, document requirements, 6 languages, confirmation revisions and idempotent submission passed.');
 } finally { Date.now = originalDateNow; await server.close(); }

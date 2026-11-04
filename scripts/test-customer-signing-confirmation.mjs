@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
-const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false } });
+const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
 try {
-  const base = '/src/apps/selfservice-rental/';
+  const base = '/src/';
   const { LanguageProvider } = await server.ssrLoadModule(base + 'contexts/LanguageContext.tsx');
   const { preparationTranslations } = await server.ssrLoadModule(base + 'i18n/preparation.ts');
-  const { PreparationSigningConfirmDialog, PreparationSigningConfirmContent } = await server.ssrLoadModule(base + 'modules/pickup-preparation/PreparationSigningConfirmDialog.tsx');
+  const { PreparationSigningConfirmDialog, PreparationSigningConfirmContent } = await server.ssrLoadModule(base + 'modules/selfservice-rental/pickup/PreparationSigningConfirmDialog.tsx');
   const render = (component, language, props) => renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(component, { onClose() {}, onConfirm() {}, ...props })));
   for (const [language, copy] of Object.entries(preparationTranslations)) {
     for (const submitting of [false, true]) for (const blocked of [false, true]) {
