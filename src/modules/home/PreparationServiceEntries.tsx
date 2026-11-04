@@ -59,7 +59,7 @@ export function PreparationServiceEntriesContent({ draft, hasPreparation, onIden
   const identityStatus = t(identityDisabled && !disabled ? 'prepIdentityClosed' : identity.status);
   const identityAction = t(identityDisabled && !disabled ? 'prepIdentityClosed' : identity.action);
   const identityNote = `${id}-identity`;
-  const showIdentityNote = PREPARATION_ONLINE_IDENTITY_ENABLED && Boolean(expired || hasPreparation || draft.submittedAt || rejected);
+  const showIdentityNote = PREPARATION_ONLINE_IDENTITY_ENABLED && Boolean(hasPreparation || draft.submittedAt || rejected);
   const showNotes = showIdentityNote;
   return <section aria-labelledby="prep-services-title">
     <h2 id="prep-services-title" className="mb-2 px-1 text-customer-label text-customer-text-secondary">{t('prepSelfServices')}</h2>
@@ -76,7 +76,6 @@ export function PreparationServiceEntriesContent({ draft, hasPreparation, onIden
     {showNotes && <div className="mt-3 space-y-2 px-1 text-customer-caption text-customer-text-tertiary" aria-live="polite">
       {showIdentityNote && <div id={identityNote}>
         {(hasPreparation || draft.submittedAt || rejected) && <p className={rejected ? 'text-customer-label text-customer-danger-text' : 'text-customer-label text-customer-text-secondary'}>{t('prepIdentityTileTitle')} · {identityStatus}</p>}
-        {expired && <p>{t('prepIdentityExpired')}</p>}
         {rejected && <p className="break-words text-customer-danger-text">{draft.documentReview?.rejectionReason?.trim() || t(draft.documentReview?.rejectionReasonKey ?? 'prepReviewMissingReason')}</p>}
       </div>}
     </div>}

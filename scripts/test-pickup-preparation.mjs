@@ -408,6 +408,28 @@ try {
     assert.ok(servicesMarkup.includes(preparationTranslations[language].prepIdentityTileTitle));
     assert.ok(!servicesMarkup.includes('step=inspection'));
   }
+  const serviceTestNow = Date.now;
+  Date.now = () => cutoff + 1;
+  try {
+    for (const language of Object.keys(preparationTranslations)) {
+      const copy = preparationTranslations[language];
+      for (const orderId of ['RC10001', 'RC10014']) {
+        for (const progress of ['empty', 'draft', 'submitted']) {
+          const draft = newDraft(orderId);
+          if (progress === 'submitted') draft.submittedAt = '2026-10-31T12:00:00Z';
+          const markup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(PreparationServiceEntries, { draft, hasPreparation: progress !== 'empty', phone: '', onIdentity() {} })));
+          const expiredCopy = renderToStaticMarkup(React.createElement('p', null, copy.prepIdentityExpired));
+          const demoCopy = renderToStaticMarkup(React.createElement('p', null, copy.prepIdentityDemoClosed));
+          assert.ok(!markup.includes(expiredCopy.slice(3, -4)), `${language}/${orderId}/${progress}: no standing deadline notice on the homepage`);
+          assert.ok(!markup.includes(demoCopy.slice(3, -4)), `${language}/${orderId}/${progress}: no standing demo restriction on the homepage`);
+          const identity = markup.split('<article').find(part => part.includes('data-preparation-service="identity"'));
+          assert.equal(identity.includes('aria-haspopup="dialog"'), progress !== 'submitted', 'only unsubmitted identity is blocked after the deadline; submitted records remain accessible');
+          if (progress === 'empty') assert.ok(!identity.includes('aria-describedby'), 'an empty homepage notice must not be referenced');
+          else assert.ok(markup.includes(copy[progress === 'submitted' ? 'prepSubmitted' : 'prepIdentityClosed']), 'existing preparation status remains visible');
+        }
+      }
+    }
+  } finally { Date.now = serviceTestNow; }
   const xhsIdentityMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationServiceEntries, { draft: newDraft('RC10014'), hasPreparation: false, phone: '+81 50 0000 0000', onIdentity() {} })));
   const xhsIdentityTile = xhsIdentityMarkup.split('<article').find(part => part.includes('data-preparation-service="identity"'));
   assert.ok(xhsIdentityTile?.includes('aria-haspopup="dialog"'), 'XHS local demo identity entry remains clickable while styled unavailable');
