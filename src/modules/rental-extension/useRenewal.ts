@@ -8,7 +8,7 @@ import { localRenewalDemoScenario } from './localDemoGate';
 
 export function useRenewal(booking: RenewalBooking, eligible: boolean, locale: PreparationLanguage) {
   const api = useMemo(() => {
-    const demoApi = import.meta.env.DEV && localRenewalDemoScenario(booking.orderId)
+    const demoApi = localRenewalDemoScenario(booking.orderId)
       ? import('./localDemo').then(({ createLocalRenewalApi }) => createLocalRenewalApi(booking.orderId))
       : null;
     if (demoApi) return {

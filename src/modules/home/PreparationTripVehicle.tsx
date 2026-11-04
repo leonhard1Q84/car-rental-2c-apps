@@ -9,18 +9,19 @@ import { InspectionPhotoImage, InspectionPhotoViewer } from '../selfservice-rent
 export function TripVehicleContent({ state, assignment, onRetry }: { state: InspectionLoadState; assignment?: VehicleAssignment; onRetry: () => void }) {
   const { t } = useContext(LanguageContext);
   const [viewing, setViewing] = useState(false);
-  const snapshot = (assignment === undefined || assignment.status === 'ASSIGNED') && state.status === 'ready' ? state.snapshot : null;
+  const snapshot = (assignment === undefined || assignment.status === 'ASSIGNED') && state.status === 'ready' && state.snapshot.orderId === state.orderId ? state.snapshot : null;
   const currentAssignment = assignment ? publishedTripAssignment(state.orderId, state, assignment) : undefined;
+  const vehicle = snapshot?.vehicle ?? (currentAssignment?.status === 'ASSIGNED' ? currentAssignment : null);
   const credit = currentAssignment?.status === 'ASSIGNED' ? currentAssignment.imageCredit : undefined;
   const photo = snapshot?.groups.exteriorAndDamage?.photos[0];
   const photoLabel = photo?.labelKey ? t(photo.labelKey) : t('prepInspectionVehicle');
   return <section data-trip-vehicle className="rounded-customer-card border border-customer-border bg-customer-card p-4 shadow-customer-card">
     <h2 className="mb-3 text-customer-title">{t('prepInspectionVehicle')}</h2>
-    {snapshot ? <div className="flex items-start gap-3">
+    {vehicle ? <div className="flex items-start gap-3">
       <div className="w-24 shrink-0">{photo ? <InspectionPhotoImage photo={photo} label={photoLabel} onOpen={() => setViewing(true)} />
         : <p className="rounded-customer-inset bg-customer-inset p-2 text-customer-caption text-customer-text-tertiary">{t('prepInspectionNoPhotos')}</p>}</div>
       <dl className="min-w-0 flex-1 space-y-3">
-        {[[t('prepInspectionModel'), snapshot.vehicle.model], [t('prepInspectionPlate'), snapshot.vehicle.plate]].map(([label, value]) =>
+        {[[t('prepInspectionModel'), vehicle.model], [t('prepInspectionPlate'), vehicle.plate]].map(([label, value]) =>
           <div key={label} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3"><dt className="text-customer-label text-customer-text-tertiary">{label}</dt><dd className="break-words text-right text-customer-body-strong">{value || t('prepInspectionMissing')}</dd></div>)}
       </dl>
     </div> : <div role={state.status === 'error' ? 'alert' : 'status'} className="text-customer-body text-customer-text-secondary">

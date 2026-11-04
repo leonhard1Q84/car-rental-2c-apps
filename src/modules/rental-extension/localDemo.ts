@@ -1,6 +1,7 @@
 import type { DepositConsent, LookupResult, Quote, RequestRecord } from './api';
 import type { PreparationLanguage } from '../../i18n/preparation';
 import { localRenewalDemoScenario, type LocalRenewalDemoScenario } from './localDemoGate';
+import { preparationBooking } from '../../app/customer-journey/bookingFixtures';
 
 type DemoState = { scenario: LocalRenewalDemoScenario; order: LookupResult['order']; request?: RequestRecord; history: RequestRecord[]; createKeys: Map<string, string>; gets: number; payAttempts: number };
 const states = new Map<string, DemoState>();
@@ -13,15 +14,17 @@ export function resetLocalRenewalDemo(orderId: string): void {
 }
 
 function makeOrder(orderId: string): LookupResult['order'] {
-  const plate = `品川300 す 88-${orderId.slice(-2)}`;
+  const booking = preparationBooking(orderId);
+  const vehicle = booking.vehicleAssignment;
+  if (vehicle.status !== 'ASSIGNED') throw new Error('DEMO_VEHICLE_NOT_ASSIGNED');
   return {
-    id: orderId, confirmation_number: orderId, brand_code: 'IX', brand_name: 'IX RENTAL',
-    primary_driver: { surname: 'Smith', full_name: 'Alex Smith', email: 'alex.smith@example.com', phone: '+819012348888' },
-    status: 'PICKED_UP', pickup_time: '2026-11-01T10:00:00+09:00', pickup_branch_id: 'tokyo-haneda',
-    pickup_branch_name: 'Tokyo Haneda Airport Branch', current_return_time: '2026-11-04T10:00:00+09:00',
-    return_branch_id: 'tokyo-haneda', return_branch_name: 'Tokyo Haneda Airport Branch', branch_timezone: 'Asia/Tokyo',
-    booked_model_id: 'toyota-harrier', booked_model_name: 'Toyota Harrier', actual_vehicle_id: `vehicle-${orderId}`,
-    actual_plate: plate, actual_model_id: 'toyota-harrier', actual_model_name: 'Toyota Harrier', currency: 'JPY',
+    id: orderId, confirmation_number: booking.confirmationCode, brand_code: booking.brandCode, brand_name: 'IX RENTAL',
+    primary_driver: { surname: booking.last, full_name: `${booking.first} ${booking.last}`, email: booking.email, phone: booking.phone },
+    status: 'PICKED_UP', pickup_time: booking.pickupAt, pickup_branch_id: 'tokyo-narita',
+    pickup_branch_name: 'Narita Airport Branch', current_return_time: booking.returnAt,
+    return_branch_id: 'tokyo-narita', return_branch_name: 'Narita Airport Branch', branch_timezone: booking.timezone,
+    booked_model_id: 'toyota-yaris', booked_model_name: 'Toyota Yaris', actual_vehicle_id: `vehicle-${orderId}`,
+    actual_plate: vehicle.plate, actual_model_id: 'toyota-harrier', actual_model_name: vehicle.model, currency: 'JPY',
     daily_base_rate: 12000, insurance: { code: 'STANDARD', name: 'Standard coverage', daily_rate: 1000, can_extend: true, provider: 'IX' },
     addons: [{ code: 'ETC', name: 'ETC card', charge_type: 'DAILY', unit_price: 100, quantity: 1 }],
     deposit_status: 'AUTHORIZED', atp_status: 'UNAVAILABLE',

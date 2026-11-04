@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'vite';
+import { build, createServer } from 'vite';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 const server = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [], entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
@@ -11,9 +11,24 @@ try {
   const base = '/src/modules/rental-extension/';
   const model = await server.ssrLoadModule(base + 'model.ts');
   const { createExtensionApi, ApiError } = await server.ssrLoadModule(base + 'api.ts');
-  const { createLocalRenewalApi, resetLocalRenewalDemo } = await server.ssrLoadModule(base + 'localDemo.ts');
-  const { localRenewalDemoScenario } = await server.ssrLoadModule(base + 'localDemoGate.ts');
+  // Exercise the fixture adapter as bundled for Vercel, where DEV is false.
+  const productionFixtures = await build({ configFile: false, envDir: false, logLevel: 'error',
+    resolve: { alias: { '@shared': path.join(root, 'shared') } },
+    plugins: [{ name: 'renewal-production-fixtures', resolveId: id => id === 'renewal-fixtures' || id.endsWith('/renewal-fixtures') ? '\0renewal-fixtures' : undefined,
+      load: id => id === '\0renewal-fixtures' ? `export * from ${JSON.stringify(path.join(root, 'modules/rental-extension/localDemo.ts'))}; export * from ${JSON.stringify(path.join(root, 'modules/rental-extension/localDemoGate.ts'))};` : undefined }],
+    build: { write: false, lib: { entry: 'renewal-fixtures', formats: ['es'] }, minify: false },
+  });
+  const fixtureCode = (Array.isArray(productionFixtures) ? productionFixtures[0] : productionFixtures).output.find(item => item.type === 'chunk' && item.isEntry).code;
+  const { createLocalRenewalApi, resetLocalRenewalDemo, localRenewalDemoScenario } = await import(`data:text/javascript;base64,${Buffer.from(fixtureCode).toString('base64')}`);
+  for (const apiKey of ['VITE_CUSTOMER_AUTH_API_BASE_URL', 'VITE_CUSTOMER_SELF_SERVICE_API_BASE_URL', 'VITE_RENTAL_EXTENSION_API_BASE_URL']) {
+    const result = await build({ configFile: false, envDir: false, logLevel: 'error', define: { [`import.meta.env.${apiKey}`]: JSON.stringify('https://api.example.test') },
+      build: { write: false, lib: { entry: path.join(root, 'modules/rental-extension/localDemoGate.ts'), formats: ['es'] }, minify: false } });
+    const code = (Array.isArray(result) ? result[0] : result).output.find(item => item.type === 'chunk' && item.isEntry).code;
+    const gate = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${apiKey}`);
+    for (let number = 10006; number <= 10013; number++) assert.equal(gate.localRenewalDemoScenario(`RC${number}`), undefined, `${apiKey} disables simulated eligibility in production`);
+  }
   const { findPreparationBooking } = await server.ssrLoadModule('/src/modules/auth/verification.ts');
+  const { preparationBooking } = await server.ssrLoadModule('/src/app/customer-journey/bookingFixtures.ts');
   const now = Date.parse('2026-11-03T04:00:00Z');
   const original = '2026-11-04T01:00:00Z';
   const extended = '2026-11-06T01:00:00Z';
@@ -182,6 +197,13 @@ try {
     assert.equal(demoLookup.active_request, null, `${orderId} begins before renewal quote and allocation`);
     assert.equal(demoLookup.latest_request, undefined, `${orderId} has no seeded prior renewal`);
     assert.equal(demoLookup.order.actual_vehicle_id, `vehicle-${orderId}`, 'the existing rental vehicle remains assigned');
+    const booking = preparationBooking(orderId);
+    assert.equal(demoLookup.order.confirmation_number, booking.confirmationCode);
+    assert.equal(demoLookup.order.actual_plate, booking.vehicleAssignment.plate);
+    assert.equal(demoLookup.order.actual_model_name, booking.vehicleAssignment.model);
+    assert.equal(demoLookup.order.pickup_time, booking.pickupAt);
+    assert.equal(demoLookup.order.current_return_time, booking.returnAt);
+    assert.equal(demoLookup.order.primary_driver.phone, booking.phone);
     demoLookups.set(orderId, demoLookup);
   }
   async function createFor(orderId, api = createLocalRenewalApi(orderId)) {

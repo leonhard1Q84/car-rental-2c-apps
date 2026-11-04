@@ -501,6 +501,21 @@ try {
   const { loadPublishedInspection: loadTripVehicle } = await server.ssrLoadModule('/src/modules/selfservice-rental/pickup/inspection/fixtures.ts');
   const tripSnapshot = await loadTripVehicle('RC10001');
   for (const language of Object.keys(preparationTranslations)) {
+    for (const orderId of ['RC10006', 'RC10013']) {
+      const booking = preparationBookings.find(item => item.orderId === orderId);
+      const state = { status: 'empty', orderId };
+      const vehicle = publishedTripAssignment(orderId, state, booking.vehicleAssignment);
+      const html = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(TripVehicleContent, { state, assignment: booking.vehicleAssignment, onRetry() {} })));
+      assert.ok(html.includes(vehicle.model) && html.includes(vehicle.plate), `${language}/${orderId}: homepage and details share assigned vehicle without inspection publication`);
+      assert.ok(!html.includes(preparationTranslations[language].prepInspectionEmpty));
+      assert.ok(html.includes(preparationTranslations[language].prepInspectionNoPhotos), 'assignment does not invent inspection photos');
+      for (const status of ['loading', 'error']) {
+        const unavailable = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(TripVehicleContent, { state: { status, orderId }, assignment: booking.vehicleAssignment, onRetry() {} })));
+        assert.ok(!unavailable.includes(vehicle.plate), 'loading and error do not expose fallback stale vehicle');
+      }
+    }
+    const wrongOrder = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: language }, React.createElement(TripVehicleContent, { state: { ...publishedVehicle, snapshot: { ...publishedVehicle.snapshot, orderId: 'RC10013' } }, assignment: photoAssignment, onRetry() {} })));
+    assert.ok(!wrongOrder.includes(publishedVehicle.snapshot.vehicle.plate), 'details reject a publication belonging to another order');
     const vehicleCard = React.createElement(TripVehicleContent, { state: {status:'ready',orderId:'RC10001',snapshot:tripSnapshot},onRetry() {} });
     const markup = renderToStaticMarkup(React.createElement(LanguageProvider, {initialLang:language},
       React.createElement(ReservationDetailsScreen, {embedded:true, customerInfoFirst:true, beforeBookingInfo:vehicleCard,
