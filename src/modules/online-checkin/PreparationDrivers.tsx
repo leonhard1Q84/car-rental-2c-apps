@@ -39,7 +39,7 @@ const DriverCard: React.FC<DriverCardProps> = ({ driver, index, readOnly, photos
       </label>
       <p className="text-customer-caption text-customer-text-tertiary">{t('prepPhoneHelp')}</p>
       <fieldset><legend className="mb-2 text-customer-label text-customer-text-secondary">{t('prepCustomerType')}</legend>
-        <div className="flex flex-wrap gap-x-5 gap-y-2">{(['local', 'international'] as const).map(mode => <label key={mode} className="flex min-h-11 items-center gap-2 text-customer-caption text-customer-text-secondary"><input type="radio" name={`customer-type-${driver.id}`} value={mode} checked={driver.mode === mode} onChange={() => onEdit({ mode })} className="size-5 accent-[var(--customer-color-orange-500)]" />{t(mode === 'local' ? 'prepDomestic' : 'prepForeign')}</label>)}</div>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">{(['local', 'international'] as const).map(mode => <label key={mode} className="flex min-h-11 items-center gap-2 text-customer-caption text-customer-text-secondary"><input type="radio" name={`customer-type-${driver.id}`} value={mode} checked={driver.mode === mode} onChange={() => onEdit({ mode })} className="size-5 accent-[var(--customer-color-brand)]" />{t(mode === 'local' ? 'prepDomestic' : 'prepForeign')}</label>)}</div>
       </fieldset>
     </fieldset>
     <DriverDocuments driver={driver} photos={photos} addPhotos={addPhotos} removePhoto={removePhoto} readOnly={readOnly} />
@@ -56,17 +56,13 @@ export function PreparationDrivers({ drivers, onChange, onRemove, clearAdditiona
   const edit = (id: string, patch: Partial<Driver>) => onChange(drivers.map(driver => driver.id === id ? { ...driver, ...patch } : driver));
   const card = (driver: Driver, index: number) => <DriverCard key={driver.id} driver={driver} index={index} photos={photos} addPhotos={addPhotos} removePhoto={removePhoto} onEdit={patch => edit(driver.id, patch)} onRemove={() => onRemove(driver.id)} readOnly={readOnly} />;
   return <div className="space-y-4">
-    <Alert tone="warning" role={false}>
-      <p className="text-customer-body">{t('prepBeforeStart')}</p>
-      <a href="#driver-documents-primary" className="mt-1 inline-flex min-h-9 items-center text-customer-label text-customer-brand-text underline underline-offset-2">{t('prepViewRequirements')}</a>
-    </Alert>
     <div id="primary-driver-documents" className="scroll-mt-36">{drivers[0] && card(drivers[0], 0)}</div>
     <Card as="section" padding="compact" className="space-y-4">
       <fieldset disabled={readOnly}><legend className="mb-1 text-customer-label text-customer-text-secondary">{t('prepHasAdditional')}</legend>
         <div className="flex gap-6">{[true, false].map(hasAdditional => <label key={String(hasAdditional)} className="flex min-h-11 items-center gap-2 text-customer-caption text-customer-text-secondary"><input type="radio" name="additional-drivers" checked={(drivers.length > 1) === hasAdditional} onChange={() => {
           if (hasAdditional && drivers.length === 1) onChange([...drivers, newDriver(crypto.randomUUID())]);
           if (!hasAdditional && drivers.length > 1) setConfirmClear(true);
-        }} className="size-5 accent-[var(--customer-color-orange-500)]" />{t(hasAdditional ? 'prepYes' : 'prepNo')}</label>)}</div>
+        }} className="size-5 accent-[var(--customer-color-brand)]" />{t(hasAdditional ? 'prepYes' : 'prepNo')}</label>)}</div>
       </fieldset>
       {confirmClear && <Alert tone="warning" role="alert">
         <p>{t('prepClearDrivers')}</p>

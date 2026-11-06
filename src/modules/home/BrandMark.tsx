@@ -1,5 +1,6 @@
 import React from 'react';
 import trustGoLogo from '../../assets/brands/trust-go.png';
+import ixRentalLogo from '../../assets/brands/ix-rental.png';
 
 export function BrandMark({ brandCode, className = '' }: { brandCode?: string; className?: string }) {
   if (brandCode === 'TG' || brandCode === 'TRUST_GO') {
@@ -12,11 +13,10 @@ export function BrandMark({ brandCode, className = '' }: { brandCode?: string; c
     );
   }
   return (
-    <div
-      aria-label="IX RENTAL"
-      className={`size-8 rounded-lg bg-[var(--customer-color-brand,#FF5A00)] flex items-center justify-center text-white font-black text-xs tracking-wider shadow-sm shrink-0 ${className}`}
-    >
-      IX
-    </div>
+    <img
+      src={ixRentalLogo}
+      alt="IX RENTAL"
+      className={`h-7 w-auto object-contain shrink-0 ${className}`}
+    />
   );
 }

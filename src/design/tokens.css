@@ -135,3 +135,43 @@
   --customer-color-text-primary: var(--customer-color-text);
   --customer-color-border-default: var(--customer-color-border);
 }
+
+/* TRUST GO brand theme override */
+:root[data-brand='TG'],
+:root[data-brand='trustgo'],
+:root[data-brand='TRUST_GO'],
+[data-brand='TG'],
+[data-brand='trustgo'],
+[data-brand='TRUST_GO'] {
+  --customer-color-brand: #29ace1;
+  --customer-color-brand-hover: #1ea0d8;
+  --customer-color-brand-pressed: #0284c7;
+  --customer-color-brand-text: #0369a1;
+  --customer-color-brand-subtle: #f0f9ff;
+  --customer-color-brand-border: #bae6fd;
+  --customer-color-brand-ring: #e0f2fe;
+
+  --customer-color-brand-primary: var(--customer-color-brand);
+  --customer-color-brand-secondary: var(--customer-color-brand-hover);
+  --customer-color-brand-subtle-border: var(--customer-color-brand-border);
+}
+
+/* IX RENTAL brand theme override */
+:root[data-brand='IX'],
+:root[data-brand='ix'],
+:root[data-brand='IX_RENTAL'],
+[data-brand='IX'],
+[data-brand='ix'],
+[data-brand='IX_RENTAL'] {
+  --customer-color-brand: #c91c1e;
+  --customer-color-brand-hover: #b0181a;
+  --customer-color-brand-pressed: #931416;
+  --customer-color-brand-text: #c91c1e;
+  --customer-color-brand-subtle: #fef2f2;
+  --customer-color-brand-border: #fecaca;
+  --customer-color-brand-ring: #fee2e2;
+
+  --customer-color-brand-primary: var(--customer-color-brand);
+  --customer-color-brand-secondary: var(--customer-color-brand-hover);
+  --customer-color-brand-subtle-border: var(--customer-color-brand-border);
+}

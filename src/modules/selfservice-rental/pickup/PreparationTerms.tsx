@@ -38,7 +38,7 @@ export function PreparationTerms({ draft, readOnly, onChange }: Props) {
         const checked = group ? preparationGroupConfirmed(draft, group.materialGroup)
           : Boolean(recordMatches && record?.items.some(saved => saved.id === additional?.id && saved.text === additional?.text && saved.locale === additional?.locale && saved.confirmedAt));
         return <label key={configured.id} className="flex min-h-12 items-start gap-3 rounded-customer-control bg-customer-inset px-3 py-3">
-          <input type="checkbox" checked={checked} disabled={readOnly} className="mt-0.5 size-5 shrink-0 accent-[var(--customer-color-orange-500)]" onChange={event => {
+          <input type="checkbox" checked={checked} disabled={readOnly} className="mt-0.5 size-5 shrink-0 accent-[var(--customer-color-brand)]" onChange={event => {
             if (readOnly || !snapshot) return;
             if (group) {
               onChange({ confirmation: updateRentalMaterialConfirmation({ resolution, currentRecord: draft.confirmation,

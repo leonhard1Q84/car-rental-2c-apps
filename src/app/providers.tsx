@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { ToastProvider } from '../design/ui';
 
 interface SelfserviceAppProvidersProps {
   children: React.ReactNode;
@@ -12,7 +13,7 @@ const SelfserviceAppProviders: React.FC<SelfserviceAppProvidersProps> = ({ child
     };
   }, []);
 
-  return <>{children}</>;
+  return <ToastProvider>{children}</ToastProvider>;
 };
 
 export default SelfserviceAppProviders;

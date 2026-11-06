@@ -481,8 +481,9 @@ try {
   assert.equal(identityServicePresentation(serviceRejected, true).action, 'prepReviewModify');
   assert.equal(identityServicePresentation({ ...serviceRejected, submittedAt: undefined, correctionStartedAt: '2026-10-20T02:00:00Z' }, true).status, 'prepServiceNeedsUpdate', 'correction retains rejection until resubmission');
   const rejectedServicesMarkup = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'en' }, React.createElement(PreparationServiceEntries, { draft: serviceRejected, hasPreparation: true, phone: '+81 50 0000 0000', onIdentity() {} })));
-  assert.ok(rejectedServicesMarkup.includes('Please replace the blurry photo'));
   assert.ok(rejectedServicesMarkup.includes(preparationTranslations.en.prepIdentityTileTitle));
+  assert.ok(rejectedServicesMarkup.includes(preparationTranslations.en.prepServiceNeedsUpdate), 'rejected identity entry renders status badge');
+  assert.ok(!rejectedServicesMarkup.includes('Please replace the blurry photo'), 'rejected reason is not flattened on homepage');
   const photoSummary = renderToStaticMarkup(React.createElement(LanguageProvider, { initialLang: 'zh-CN' }, React.createElement(PreparationTripSummary, { reservation, vehicleModel: 'Honda Stepwgn', vehicleAssignment: photoAssignment, onDetails() {} })));
   assert.ok(!photoSummary.includes(photoAssignment.imageCredit.source), 'homepage has no image credit link');
   assert.ok(photoSummary.indexOf(photoAssignment.plate) < photoSummary.indexOf('data-fuel-sign'), 'fuel follows the plate');
@@ -809,6 +810,15 @@ try {
     assert.ok(renderReview({ ...resubmitted, documentReview: undefined }).includes(texts.prepSubmitted), 'legacy submission prompts onsite verification');
     assert.equal(renderReview(newDraft('RC10002')), '');
   }
+  const { BrandMark } = await server.ssrLoadModule('/src/modules/home/BrandMark.tsx');
+  const tgMark = renderToStaticMarkup(React.createElement(BrandMark, { brandCode: 'TG' }));
+  assert.ok(tgMark.includes('alt="TRUST GO"'), 'BrandMark renders TRUST GO logo image');
+  assert.ok(tgMark.includes('trust-go'), 'BrandMark references trust-go asset');
+  const ixMark = renderToStaticMarkup(React.createElement(BrandMark, { brandCode: 'IX' }));
+  assert.ok(ixMark.includes('alt="IX RENTAL"'), 'BrandMark renders IX RENTAL logo image');
+  assert.ok(ixMark.includes('ix-rental'), 'BrandMark references ix-rental asset');
+
+  console.log('Brand tokens and mark: TRUST GO (#29ace1 / #0369a1) and IX RENTAL (#c91c1e) assets and branding passed.');
   console.log('Review correction: rejected fixture, reopen and resubmission persistence/failures, required documents, preserved confirmations/history, locked fields, duplicate submission and six-language status rendering passed.');
   console.log('Pickup preparation: untouched RC10002 fixture, order storage isolation and recovery, verification entry, credentials, 6-language verification rendering, validation, driver isolation, document requirements, 6 languages, confirmation revisions and idempotent submission passed.');
 } finally { Date.now = originalDateNow; await server.close(); }

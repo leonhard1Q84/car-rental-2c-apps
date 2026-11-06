@@ -258,6 +258,7 @@ const messages = {
   prepArrivalHint: ['携带驾驶人证件原件，到店核验、检查实际车辆，完成正式签名和交接。', '攜帶駕駛人證件正本，到店核驗、檢查實際車輛，完成正式簽名與交接。', 'Bring original driver documents. Verify your identity, inspect the vehicle, and complete signing and handover at the store.', '書類の原本をお持ちください。店舗で本人確認、車両確認、署名と引渡しを行います。', '운전자 서류 원본을 지참하세요. 매장에서 본인 확인, 차량 점검, 서명 및 인도를 진행합니다.', 'นำเอกสารต้นฉบับมาตรวจยืนยัน ตรวจรถ ลงนาม และรับมอบที่สาขา'],
   prepBookedVehicle: ['预订车型', '預訂車型', 'Booked vehicle', '予約車種', '예약 차량', 'รถที่จอง'],
   prepSimilarVehicle: ['或同组车型', '或同組車型', 'or similar', '同等クラス', '또는 동급', 'หรือเทียบเท่า'],
+  prepSimilarVehicleHint: ['同组车型指排量、座位数及空间相当的车型，以门店实际交付为准。', '同組車型指排氣量、座位數及空間相當的車型，以門市實際交付為準。', 'Similar models share equivalent displacement, seating, and cargo capacity. Actual vehicle delivered by the branch may vary.', '同等クラスとは、排気量・乗車定員・積載量が同等の車両を指します。実際の配車は店舗の在庫状況により決定します。', '동급 차종은 배기량, 탑승 인원, 적재 공간이 동등한 차량을 의미하며, 실제 차량은 지점 상황에 따라 배정됩니다.', 'รถกลุ่มเทียบเท่าหมายถึงรถที่มีขนาดเครื่องยนต์ จำนวนที่นั่ง และพื้นที่ใกล้เคียงกัน โดยขึ้นอยู่กับการจัดสรรจริงของสาขา'],
   prepBookedGroup: ['预订车型组别', '預訂車型組別', 'Booked vehicle group', '予約車両クラス', '예약 차량 등급', 'ประเภทรถที่จอง'],
   prepGroup: ['Toyota Yaris 或同组车型', 'Toyota Yaris 或同組車型', 'Toyota Yaris or similar', 'Toyota Yaris 同等クラス', 'Toyota Yaris 또는 동급', 'Toyota Yaris หรือเทียบเท่า'],
   prepStore: ['成田机场店', '成田機場店', 'Narita Airport branch', '成田空港店', '나리타 공항점', 'สาขาสนามบินนาริตะ'],

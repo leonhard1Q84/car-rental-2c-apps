@@ -108,7 +108,7 @@ export const DriverPhotoSection: React.FC<{
           <path d="M192 87h122l17 32H176z" fill="var(--customer-color-slate-300)" />
           <rect x="214" y="145" width="84" height="27" rx="3" fill="var(--customer-color-card)" />
           <path d="M225 154h10m7 0h10m7 0h10m7 0h10m-61 9h61" stroke="var(--customer-color-slate-700)" strokeWidth="4" />
-          <rect x="41" y="104" width="131" height="88" rx="8" fill="var(--customer-color-card)" stroke="var(--customer-color-orange-500)" strokeWidth="3" />
+          <rect x="41" y="104" width="131" height="88" rx="8" fill="var(--customer-color-card)" stroke="var(--customer-color-brand)" strokeWidth="3" />
           <circle cx="69" cy="131" r="12" fill="var(--customer-color-slate-400)" /><path d="M50 166q19-39 38 0" fill="var(--customer-color-slate-400)" />
           <path d="M99 126h58m-58 16h43m-43 16h52m-97 22h100" stroke="var(--customer-color-slate-400)" strokeWidth="5" />
         </svg>

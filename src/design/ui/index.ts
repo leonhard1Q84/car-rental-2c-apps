@@ -6,4 +6,5 @@ export { Badge, IconChip, type StatusTone } from './badge';
 export { Button, buttonClass, type ButtonProps } from './button';
 export { Field, Input, Select, Textarea } from './field';
 export { Alert, Skeleton, EmptyState, Result } from './feedback';
+export { ToastProvider, useToast, showCustomerToast, type ToastTone, type ToastMessage } from './toast';
 export { Stepper, Timeline, type StepperStep, type TimelineItem } from './stepper';

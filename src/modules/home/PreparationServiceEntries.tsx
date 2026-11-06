@@ -12,6 +12,7 @@ import { preparationServiceBlockReason, type PreparationRestrictedService } from
 import type { PreparationKey } from '../../i18n/preparation';
 import { customerInspectionApiConfigured } from '@shared/services/customerInspectionApi';
 import { CUSTOMER_FEEDBACK_URL } from '../../config/feedback';
+import { showCustomerToast } from '../../design/ui';
 
 interface ServiceEntriesProps {
   draft: PreparationDraft; hasPreparation: boolean; onIdentity: () => void; onInspection: () => void; onNotices: () => void;
@@ -21,12 +22,16 @@ interface ServiceEntriesProps {
 interface ServiceTileProps {
   service: string; title: string; icon: LucideIcon; disabled: boolean; describedBy?: string;
   label?: string; loading?: boolean; onClick?: () => void; href?: string; external?: boolean; onUnavailable?: () => void;
+  badge?: React.ReactNode;
 }
 
-function ServiceTile({ service, title, icon: Icon, disabled, describedBy, label, loading = false, onClick, href, external, onUnavailable }: ServiceTileProps) {
+function ServiceTile({ service, title, icon: Icon, disabled, describedBy, label, loading = false, onClick, href, external, onUnavailable, badge }: ServiceTileProps) {
   const className = `flex min-h-24 w-full min-w-0 flex-col items-center gap-2 rounded-customer-inset px-1 py-2 text-center text-customer-label focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-customer-brand ${disabled ? 'cursor-pointer text-customer-text-tertiary hover:bg-customer-inset' : 'text-customer-text hover:bg-customer-inset'}`;
   const content = <>
-    <span className={`flex size-12 shrink-0 items-center justify-center rounded-customer-inset ${disabled ? 'bg-customer-inset text-customer-text-disabled' : 'bg-customer-brand-subtle text-customer-brand-text'}`}>{loading ? <Loader2 size={24} className="animate-spin" aria-hidden="true" /> : <Icon size={24} aria-hidden="true" />}</span>
+    <span className="relative inline-flex">
+      <span className={`flex size-12 shrink-0 items-center justify-center rounded-customer-inset ${disabled ? 'bg-customer-inset text-customer-text-disabled' : 'bg-customer-brand-subtle text-customer-brand-text'}`}>{loading ? <Loader2 size={24} className="animate-spin" aria-hidden="true" /> : <Icon size={24} aria-hidden="true" />}</span>
+      {badge}
+    </span>
     <span className="w-full break-words leading-5">{title}</span>
   </>;
   return <article data-preparation-service={service} className="min-w-0">
@@ -59,13 +64,26 @@ export function PreparationServiceEntriesContent({ draft, hasPreparation, onIden
   const identityStatus = t(identityDisabled && !disabled ? 'prepIdentityClosed' : identity.status);
   const identityAction = t(identityDisabled && !disabled ? 'prepIdentityClosed' : identity.action);
   const identityNote = `${id}-identity`;
-  const showIdentityNote = PREPARATION_ONLINE_IDENTITY_ENABLED && Boolean(hasPreparation || draft.submittedAt || rejected);
-  const showNotes = showIdentityNote;
+
+  const handleIdentityClick = () => {
+    if (rejected) {
+      const reason = draft.documentReview?.rejectionReason?.trim() || t(draft.documentReview?.rejectionReasonKey ?? 'prepReviewMissingReason');
+      showCustomerToast(reason, 'danger');
+    }
+    onIdentity();
+  };
+
+  const identityBadge = rejected ? (
+    <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-customer-danger px-1 text-[10px] font-bold leading-none text-white shadow-2xs">
+      {identityStatus}
+    </span>
+  ) : null;
+
   return <section aria-labelledby="prep-services-title">
     <h2 id="prep-services-title" className="mb-2 px-1 text-customer-label text-customer-text-secondary">{t('prepSelfServices')}</h2>
     <div className="rounded-customer-card border border-customer-border bg-customer-card p-3 shadow-customer-card">
       <div className="grid grid-cols-3 items-start gap-x-1.5 gap-y-3">
-        {PREPARATION_ONLINE_IDENTITY_ENABLED && <ServiceTile service="identity" title={t('prepIdentityTileTitle')} icon={FileCheck2} disabled={identityDisabled} onClick={onIdentity} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'identity' })} describedBy={showIdentityNote ? identityNote : undefined} label={`${t('prepIdentityTileTitle')} · ${identityStatus} · ${identityAction}`} />}
+        {PREPARATION_ONLINE_IDENTITY_ENABLED && <ServiceTile service="identity" title={t('prepIdentityTileTitle')} icon={FileCheck2} disabled={identityDisabled} onClick={handleIdentityClick} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'identity' })} label={`${t('prepIdentityTileTitle')} · ${identityStatus} · ${identityAction}`} badge={identityBadge} />}
         <ServiceTile service="pickup" title={t('prepPickupTileTitle')} icon={CarFront} disabled={disabled || rentalMode !== 'regular' || !pickupReady} onClick={onPickup} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'pickup' })} />
         <ServiceTile service="selfservice" title={t('prepSelfserviceTitle')} icon={KeyRound} disabled={disabled || rentalMode !== 'selfservice'} onClick={onSelfservice} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'selfservice' })} />
         <ServiceTile service="renewal" title={t('prepRenewal')} icon={CalendarPlus} disabled={disabled || !rentalActive} loading={renewalLoading} onClick={onRenewal} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'renewal' })} />
@@ -73,12 +91,6 @@ export function PreparationServiceEntriesContent({ draft, hasPreparation, onIden
         <ServiceTile service="more" title={t('prepMoreAppsTitle')} icon={Grid2X2} disabled onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'more' })} />
       </div>
     </div>
-    {showNotes && <div className="mt-3 space-y-2 px-1 text-customer-caption text-customer-text-tertiary" aria-live="polite">
-      {showIdentityNote && <div id={identityNote}>
-        {(hasPreparation || draft.submittedAt || rejected) && <p className={rejected ? 'text-customer-label text-customer-danger-text' : 'text-customer-label text-customer-text-secondary'}>{t('prepIdentityTileTitle')} · {identityStatus}</p>}
-        {rejected && <p className="break-words text-customer-danger-text">{draft.documentReview?.rejectionReason?.trim() || t(draft.documentReview?.rejectionReasonKey ?? 'prepReviewMissingReason')}</p>}
-      </div>}
-    </div>}
     {opened && blockReason && <PreparationServiceDialog title={dialogTitles[opened.service]} reason={blockReason} onClose={() => setOpened(null)} onRetry={opened.service === 'pickup' && blockReason === 'prepInspectionLoadError' ? () => { setOpened(null); onRetry?.(); } : undefined} />}
   </section>;
 }

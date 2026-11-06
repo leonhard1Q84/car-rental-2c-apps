@@ -1,6 +1,6 @@
 import { PreparationContractPage, PreparationPickupJourney, PreparationInspectionPage } from '../../modules/selfservice-rental/public-api';
 import { PreparationVerification, findPreparationBooking } from '../../modules/auth/public-api';
-import { PreparationDrivers, PreparationReviewStatus } from '../../modules/online-checkin/public-api';
+import { PreparationDrivers, PreparationReviewStatus, PreparationReviewDialog, PreparationReviewCompactNotice } from '../../modules/online-checkin/public-api';
 import { identityDeadlinePassed } from '../../modules/online-checkin/identityDeadline';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Languages, Loader2 } from 'lucide-react';
@@ -27,7 +27,7 @@ import { serviceCompletionDestination } from './serviceNavigation';
 import { preparationPageTitleKey } from './servicePresentation';
 import { PreparationRenewal } from '../../modules/rental-extension/PreparationRenewal';
 import { localRenewalDemoScenario } from '../../modules/rental-extension/localDemoGate';
-import { Alert, Button } from '../../design/ui';
+import { Alert, Button, showCustomerToast } from '../../design/ui';
 
 const languages = [['zh-CN', '简体中文'], ['zh-TW', '繁體中文'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'], ['th', 'ไทย']] as const;
 
@@ -63,7 +63,33 @@ function PreparationContent() {
   const busy = app.saving || submitting || contractBusy;
   const showFooter = ['booking', 'drivers', 'terms', 'notices'].includes(displayStep);
   const title = t(displayStep === 'renewal' ? renewalTitle : preparationPageTitleKey(displayStep));
+  const [reviewDialogOpened, setReviewDialogOpened] = useState(false);
+  const urlBrand = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('brand') || new URLSearchParams(window.location.search).get('brandCode') : null;
+  const activeBrand = step === 'auth' ? (urlBrand || undefined) : (booking.brandCode || urlBrand || undefined);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (activeBrand) {
+        document.documentElement.dataset.brand = activeBrand;
+      } else {
+        delete document.documentElement.dataset.brand;
+      }
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        delete document.documentElement.dataset.brand;
+      }
+    };
+  }, [activeBrand]);
   useEffect(() => { if (step !== 'renewal') setRenewalReady(false); }, [step]);
+  useEffect(() => {
+    if (step === 'drivers' && rejected) {
+      setReviewDialogOpened(true);
+    }
+    if (step === 'drivers' && app.identityExpired) {
+      showCustomerToast(t('prepIdentityExpired'), 'warning');
+    }
+  }, [step, rejected, app.identityExpired]);
   function go(next: Step, replace = false, returnTo?: 'contract' | 'pickup') { if (contractBusy || ((step === 'contract' || step === 'pickup') && contractDirty && !window.confirm(t('prepContractLeave')))) return; setContractDirty(false); setFormError(null); if ((next === 'notices' || next === 'terms') && lang !== draft.language) update({ language: lang }); if (step === 'contract' || step === 'pickup') app.retry(); navigate(next, replace, draft.orderId, returnTo); }
   function languageChange(language: PreparationLanguage) {
     setLang(language);
@@ -157,7 +183,7 @@ function PreparationContent() {
     onSubmit={() => { void next(); }} loading={app.loading || submitting} loadError={Boolean(app.error)}
     error={formError ? t(formError) : undefined} onRetry={app.retry}
   />;
-  return <div className="pickup-preparation mx-auto min-h-dvh w-full max-w-customer-content bg-customer-page text-customer-text antialiased">
+  return <div data-brand={activeBrand} className="pickup-preparation mx-auto min-h-dvh w-full max-w-customer-content bg-customer-page text-customer-text antialiased">
     <PreparationStickyHeader>
     <header className="flex min-h-customer-header items-center justify-between gap-3 border-b border-customer-border bg-customer-card/95 px-4 py-3 text-customer-text backdrop-blur-md shadow-2xs">
       {displayStep === 'home' ? (
@@ -236,6 +262,8 @@ function PreparationContent() {
         {step === 'renewal' && <div className={renewalReady ? undefined : 'hidden'}><PreparationRenewal onNavigation={renewalNavigation} onEntryReady={() => setRenewalReady(true)} key={draft.orderId} booking={{ orderId: draft.orderId, confirmationNumber: booking.confirmationCode, brand: booking.brandCode, customerName: `${booking.first} ${booking.last}`, vehicleName: booking.vehicleAssignment.status === 'ASSIGNED' ? booking.vehicleAssignment.model : t('prepGroup'), plate: booking.vehicleAssignment.status === 'ASSIGNED' ? booking.vehicleAssignment.plate : undefined, returnAt: booking.returnAt, timezone: booking.timezone, phone: booking.storePhone }} onBack={() => go('home', true)} onReverify={() => go('auth', true)} /></div>}
         {step !== 'renewal' && step !== 'pickup' && step !== 'details' && step !== 'inspection' && step !== 'home' && step !== 'contract' && step !== 'notices' && (step !== 'drivers' || draft.documentReview?.state === 'APPROVED') && <PreparationReviewStatus draft={draft} disabled={busy || Boolean(app.error)}
           onEdit={!app.identityExpired && rejected && !(correction && step === 'drivers') ? () => { void editPreparation(); } : undefined} />}
+        {step === 'drivers' && rejected && <PreparationReviewCompactNotice draft={draft} onClick={() => setReviewDialogOpened(true)} />}
+        {reviewDialogOpened && rejected && <PreparationReviewDialog draft={draft} onClose={() => setReviewDialogOpened(false)} />}
         {languageReset && step !== 'renewal' && step !== 'inspection' && <Alert tone="info">{t('prepLanguageReset')}</Alert>}
         {displayStep === 'home' && <>
           {formError && <Alert tone="danger">{t(formError)}</Alert>}
@@ -250,9 +278,8 @@ function PreparationContent() {
         {step === 'booking' && <>
           <div className="overflow-hidden rounded-customer-card border border-customer-border bg-customer-card shadow-customer-card"><ReservationDetailsScreen embedded afterBookingInfo={<><PreparationExtras items={booking.extras} /><PreparationInsurance planKey={booking.insurancePlanKey} /></>} orderDetails={reservation} setView={() => go('home')} /></div>
           <PreparationStoreContact phone={booking.storePhone} />
-          <label className="flex min-h-14 items-start gap-3 rounded-customer-card border border-customer-border bg-customer-card p-4 text-customer-body shadow-customer-card"><input type="checkbox" checked={draft.bookingConfirmed} disabled={readOnly || busy || app.lockedSteps.booking} onChange={event => update({ bookingConfirmed: event.target.checked })} className="mt-0.5 size-5 shrink-0 accent-[var(--customer-color-orange-500)]" />{t('prepBookingConfirm')}</label>
+          <label className="flex min-h-14 items-start gap-3 rounded-customer-card border border-customer-border bg-customer-card p-4 text-customer-body shadow-customer-card"><input type="checkbox" checked={draft.bookingConfirmed} disabled={readOnly || busy || app.lockedSteps.booking} onChange={event => update({ bookingConfirmed: event.target.checked })} className="mt-0.5 size-5 shrink-0 accent-[var(--customer-color-brand)]" />{t('prepBookingConfirm')}</label>
         </>}
-        {step === 'drivers' && <p role="status" className="text-customer-body text-customer-text-secondary">{t(app.identityExpired ? 'prepIdentityExpired' : 'prepIdentityDeadline')}</p>}
         {step === 'drivers' && <PreparationDrivers drivers={draft.drivers} onChange={drivers => update({ drivers })} onRemove={app.removeDriver} clearAdditional={app.clearAdditionalDrivers} photos={photos} addPhotos={app.addPhotos} removePhoto={app.removePhoto} readOnly={app.identityExpired || readOnly || busy || app.lockedSteps.drivers} />}
         {(step === 'terms' || step === 'notices') && <><p className="text-customer-body text-customer-text-secondary">{t('prepTermsNote')}</p>{<PreparationTerms draft={draft} readOnly={busy} onChange={update} />}</>}
       </main>

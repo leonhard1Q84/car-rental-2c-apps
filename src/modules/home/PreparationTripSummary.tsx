@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { ChevronRight, MapPin, Check, Copy, User, Clock, HelpCircle, CarFront, Luggage, SlidersHorizontal } from 'lucide-react';
 import { LanguageContext } from '../../contexts/LanguageContext';
+import { showCustomerToast } from '../../design/ui';
 import ReservationDetailsScreen from '../../components/ReservationDetailsScreen';
 import type { VehicleAssignment, VehicleFuelType } from '../../app/customer-journey/bookingFixtures';
 import { getVehiclePhoto } from './vehicleImages';
@@ -34,7 +35,6 @@ export function PreparationTripSummary({
 }) {
   const { t } = useContext(LanguageContext);
   const [orderNumberCopied, setOrderNumberCopied] = useState(false);
-  const [orderNumberCopyFailed, setOrderNumberCopyFailed] = useState(false);
   const fuel = vehicleAssignment.status === 'ASSIGNED' && vehicleAssignment.fuelType && Object.prototype.hasOwnProperty.call(fuelDisplay, vehicleAssignment.fuelType)
     ? fuelDisplay[vehicleAssignment.fuelType] : undefined;
 
@@ -56,13 +56,12 @@ export function PreparationTripSummary({
 
   const copyOrderNumber = async () => {
     setOrderNumberCopied(false);
-    setOrderNumberCopyFailed(false);
     try {
       await navigator.clipboard.writeText(reservation.orderNumber);
       setOrderNumberCopied(true);
       setTimeout(() => setOrderNumberCopied(false), 2000);
     } catch {
-      setOrderNumberCopyFailed(true);
+      showCustomerToast(t('prepCopyFailed'), 'danger');
     }
   };
 
@@ -94,11 +93,6 @@ export function PreparationTripSummary({
                 <span>{t(orderNumberCopied ? 'prepOrderNumberCopied' : 'prepCopyOrderNumber')}</span>
               </button>
             </div>
-            {orderNumberCopyFailed && (
-              <p role="alert" className="mt-1 text-customer-caption text-customer-danger-text">
-                {t('prepCopyFailed')}
-              </p>
-            )}
           </div>
           <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-customer-caption font-semibold text-emerald-700 shadow-2xs">
             <Check className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -204,10 +198,15 @@ export function PreparationTripSummary({
                       <h3 className="break-words text-customer-body-strong text-customer-text">
                         {vehicleModel}
                       </h3>
-                      <span className="inline-flex items-center gap-0.5 rounded border border-customer-border bg-customer-card px-1.5 py-0.5 text-customer-caption text-customer-text-secondary shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => showCustomerToast(t('prepSimilarVehicleHint'))}
+                        aria-label={`${t('prepSimilarVehicle')} · ${t('prepSimilarVehicleHint')}`}
+                        className="inline-flex items-center gap-0.5 rounded border border-customer-border bg-customer-card px-1.5 py-0.5 text-customer-caption text-customer-text-secondary shadow-2xs hover:bg-customer-inset active:bg-customer-border focus-visible:outline-2 focus-visible:outline-customer-brand transition-colors cursor-pointer"
+                      >
                         <span>{t('prepSimilarVehicle')}</span>
                         <HelpCircle className="h-3 w-3 text-customer-text-tertiary" />
-                      </span>
+                      </button>
                     </div>
                     <p className="mt-1.5 text-customer-caption text-customer-text-tertiary">
                       {t('prepVehicleUnassigned')}
