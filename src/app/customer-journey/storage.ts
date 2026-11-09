@@ -25,6 +25,25 @@ const PHOTO_REVIEW_RERUN_REVISION = '20261026-xhs-photo-review-rerun-1';
 const DATABASE = 'customer-pickup-preparation-v1';
 const STORE = 'orders';
 export interface PreparationRecord { draft: PreparationDraft; photos: Photo[] }
+export interface PreparationViewRecord extends PreparationRecord { previewOnly?: boolean }
+
+// Verification must not depend on storage for an unrelated, previously viewed order.
+export async function loadPreparationForView(orderId: string, requiresRecord = true): Promise<PreparationViewRecord> {
+  preparationBooking(orderId);
+  if (!requiresRecord) return { draft: newDraft(orderId), photos: [] };
+  try {
+    return await loadPreparation(orderId);
+  } catch (error) {
+    // Never replace a damaged draft or a connected API flow with sample progress.
+    const storageFailure = (typeof DOMException !== 'undefined' && error instanceof DOMException)
+      || typeof indexedDB === 'undefined'
+      || (error instanceof Error && ['STORAGE_BLOCKED', 'STORAGE_ABORTED'].includes(error.message));
+    if (orderId !== 'RC10003' || customerAuthConfigured() || customerInspectionApiConfigured()
+      || import.meta.env?.VITE_RENTAL_EXTENSION_API_BASE_URL?.trim()
+      || !storageFailure) throw error;
+    return { ...initialPreparation(orderId), previewOnly: true };
+  }
+}
 
 function initialPreparation(orderId: string): PreparationRecord {
   return orderId === 'RC10005' ? approvedPreparationFixture()
@@ -107,7 +126,7 @@ export async function loadPreparation(orderId = ORDER_ID): Promise<PreparationRe
     || result.draft.drivers.length < 1 || result.draft.drivers.length > 4
     || result.draft.drivers.some(driver => !driver || !['local', 'international'].includes(driver.mode)
       || ['id', 'first', 'last', 'email', 'phone'].some(key => typeof driver[key as keyof typeof driver] !== 'string'))
-    || !Array.isArray(result.photos) || result.photos.some(photo => !(photo.blob instanceof Blob))) throw new Error('INVALID_DRAFT');
+    || !Array.isArray(result.photos) || result.photos.some(photo => !photo || !(photo.blob instanceof Blob))) throw new Error('INVALID_DRAFT');
   if (orderId === 'RC10002' && result.draft.demoContractResetRevision !== '20261021-unsigned-1') {
     result = { ...result, draft: { ...result.draft, demoContractResetRevision: '20261021-unsigned-1',
       contractSignatureHistory: [...(result.draft.contractSignatureHistory ?? []), ...(result.draft.contractSignature ? [result.draft.contractSignature] : [])],

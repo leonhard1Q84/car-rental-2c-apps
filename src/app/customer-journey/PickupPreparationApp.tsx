@@ -57,7 +57,7 @@ function PreparationContent() {
   const [languageReset, setLanguageReset] = useState(false);
   const completed = completion(draft, photos);
   const done = { booking: completed.booking, drivers: completed.drivers && completed.documents, terms: completed.terms };
-  const readOnly = Boolean(draft.submittedAt);
+  const readOnly = Boolean(draft.submittedAt) || app.previewOnly;
   const correction = isPreparationCorrection(draft);
   const rejected = draft.documentReview?.state === 'REJECTED';
   const busy = app.saving || submitting || contractBusy;
@@ -97,7 +97,7 @@ function PreparationContent() {
     if (step === 'terms' || step === 'notices') { setLanguageReset(Boolean(draft.confirmation)); update({ language }); }
   }
   async function editPreparation() {
-    if (app.identityExpired || busy || app.error || !rejected) return;
+    if (app.previewOnly || app.identityExpired || busy || app.error || !rejected) return;
     setFormError(null);
     if (correction) { go('drivers'); return; }
     setSubmitting(true);
@@ -117,6 +117,7 @@ function PreparationContent() {
   }
   async function next() {
     setFormError(null);
+    if (app.previewOnly && step !== 'auth') { go('home', true); return; }
     if (step === 'auth') {
       if (app.loading || app.error || submitting) return;
       if (!customerAuthConfigured()) {
@@ -163,6 +164,7 @@ function PreparationContent() {
     }
   }
   const primaryLabel: PreparationKey = busy ? 'prepSaving'
+    : app.previewOnly ? 'prepServiceReturn'
     : step === 'drivers' ? app.identityExpired ? 'prepServiceReturn' : rejected && readOnly ? 'prepReviewEdit' : readOnly ? 'prepServiceReturn' : correction ? 'prepReviewResubmit' : 'prepSubmitIdentity'
     : step === 'terms' || step === 'notices' ? 'prepSaveNotices' : 'prepServiceReturn';
   function completeForContract(service: 'drivers' | 'notices' | 'inspection') {
@@ -254,14 +256,15 @@ function PreparationContent() {
       : app.error === 'load' ? <main className="p-5"><p role="alert" className="text-customer-body text-customer-danger-text">{t('prepLoadError')}</p><Button onClick={app.retry} size="md" className="mt-4">{t('prepRetry')}</Button></main>
       : <>
       <main className={`space-y-3 px-4 pt-4 ${showFooter ? 'pb-44' : 'pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]'}`}>
+        {app.previewOnly && <Alert tone="warning" action={<Button variant="text" onClick={app.retry}>{t('prepRetry')}</Button>}>{t('prepTemporaryPreview')}</Alert>}
         {displayStep === 'home' && <PreparationTripSummary orderId={draft.orderId} reservation={reservation} vehicleModel="Toyota Yaris" vehicleAssignment={booking.vehicleAssignment} onDetails={() => go('details')} />}
-        {displayStep === 'home' && <PreparationServiceEntries rentalMode={booking.rentalMode} renewalLoading={step === 'renewal' && !renewalReady} rentalActive={localRenewalDemoScenario(draft.orderId) ? true : undefined} onRenewal={() => { if (step === 'renewal') return; setRenewalReady(false); go('renewal'); }} onPickup={() => go('pickup')} onSelfservice={() => { window.location.assign('/selfservice.html?flow=selfservice'); }} draft={draft} hasPreparation={draft.bookingConfirmed || photos.length > 0 || Boolean(draft.identityConfirmed)} onContract={() => go('contract')} onNotices={() => go('notices')} onInspection={() => go('inspection')} onIdentity={() => {
-          if (rejected && !app.identityExpired) { void editPreparation(); return; }
+        {displayStep === 'home' && <PreparationServiceEntries previewOnly={app.previewOnly} rentalMode={booking.rentalMode} renewalLoading={step === 'renewal' && !renewalReady} rentalActive={localRenewalDemoScenario(draft.orderId) ? true : undefined} onRenewal={() => { if (step === 'renewal') return; setRenewalReady(false); go('renewal'); }} onPickup={() => go('pickup')} onSelfservice={() => { window.location.assign('/selfservice.html?flow=selfservice'); }} draft={draft} hasPreparation={draft.bookingConfirmed || photos.length > 0 || Boolean(draft.identityConfirmed)} onContract={() => go('contract')} onNotices={() => go('notices')} onInspection={() => go('inspection')} onIdentity={() => {
+          if (!app.previewOnly && rejected && !app.identityExpired) { void editPreparation(); return; }
           go('drivers');
         }} phone={booking.storePhone} disabled={busy || Boolean(app.error)} />}
         {step === 'renewal' && <div className={renewalReady ? undefined : 'hidden'}><PreparationRenewal onNavigation={renewalNavigation} onEntryReady={() => setRenewalReady(true)} key={draft.orderId} booking={{ orderId: draft.orderId, confirmationNumber: booking.confirmationCode, brand: booking.brandCode, customerName: `${booking.first} ${booking.last}`, vehicleName: booking.vehicleAssignment.status === 'ASSIGNED' ? booking.vehicleAssignment.model : t('prepGroup'), plate: booking.vehicleAssignment.status === 'ASSIGNED' ? booking.vehicleAssignment.plate : undefined, returnAt: booking.returnAt, timezone: booking.timezone, phone: booking.storePhone }} onBack={() => go('home', true)} onReverify={() => go('auth', true)} /></div>}
         {step !== 'renewal' && step !== 'pickup' && step !== 'details' && step !== 'inspection' && step !== 'home' && step !== 'contract' && step !== 'notices' && (step !== 'drivers' || draft.documentReview?.state === 'APPROVED') && <PreparationReviewStatus draft={draft} disabled={busy || Boolean(app.error)}
-          onEdit={!app.identityExpired && rejected && !(correction && step === 'drivers') ? () => { void editPreparation(); } : undefined} />}
+          onEdit={!app.previewOnly && !app.identityExpired && rejected && !(correction && step === 'drivers') ? () => { void editPreparation(); } : undefined} />}
         {step === 'drivers' && rejected && <PreparationReviewCompactNotice draft={draft} onClick={() => setReviewDialogOpened(true)} />}
         {reviewDialogOpened && rejected && <PreparationReviewDialog draft={draft} onClose={() => setReviewDialogOpened(false)} />}
         {languageReset && step !== 'renewal' && step !== 'inspection' && <Alert tone="info">{t('prepLanguageReset')}</Alert>}

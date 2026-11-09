@@ -2,7 +2,7 @@ import { identityDeadlinePassed } from '../../modules/online-checkin/identityDea
 import { availablePreparationStep } from './releaseScope';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { preparationEntryStep, preparationOrderId } from '../../modules/auth/verification';
-import { loadPreparation, resetDemoPreparation, savePreparation } from './storage';
+import { loadPreparationForView, resetDemoPreparation, savePreparation, type PreparationViewRecord } from './storage';
 import { newDraft, submitIdentityDraft, type Photo, type PreparationDraft, type Step } from './model';
 import type { PreparationLanguage } from '../../i18n/preparation';
 import { canEditPreparationPatch, prepareStepSubmission, savedPreparationLocks, type PreparationStepLocks } from './stepLocks';
@@ -37,10 +37,11 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
   const identityExpired = identityDeadlinePassed(orderId, clock);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [previewOnly, setPreviewOnly] = useState(false);
   const [error, setError] = useState<'load' | 'save' | null>(null);
   const [blockedPrerequisite, setBlockedPrerequisite] = useState<PreparationPrerequisite | null>(null);
   const [writes, setWrites] = useState(0);
-  const state = useRef({ draft, photos });
+  const state = useRef<PreparationViewRecord>({ draft, photos });
   const [lockedSteps, setLockedSteps] = useState<PreparationStepLocks>({ booking: false, drivers: false, terms: false });
   const locks = useRef(lockedSteps);
   function applySavedLocks(record: { draft: PreparationDraft; photos: Photo[] }) {
@@ -49,20 +50,22 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
   }
   const queue = useRef(Promise.resolve());
   const loadVersion = useRef(0);
+  const requiresRecord = step !== 'auth';
   const load = useCallback(async () => {
     const version = ++loadVersion.current;
     setLoading(true);
     try {
       await queue.current.catch(() => {});
       if (version !== loadVersion.current) return;
-      const record = await loadPreparation(orderId);
+      const record = await loadPreparationForView(orderId, requiresRecord);
       if (version !== loadVersion.current) return;
       state.current = record;
+      setPreviewOnly(Boolean(record.previewOnly));
       applySavedLocks(record);
       setDraft(record.draft); setPhotos(record.photos); setLanguage(record.draft.language); setError(null);
     } catch { if (version === loadVersion.current) setError('load'); }
     finally { if (version === loadVersion.current) setLoading(false); }
-  }, [setLanguage, orderId]);
+  }, [setLanguage, orderId, requiresRecord]);
   useEffect(() => { void load(); return () => { ++loadVersion.current; }; }, [load]);
   useEffect(() => {
     if (loading || error) return;
@@ -91,6 +94,7 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
     return () => window.removeEventListener('popstate', pop);
   }, [orderId, step, load]);
   function navigate(next: Step, replace = false, nextOrderId = orderId, returnTo?: 'contract' | 'pickup') {
+    if (state.current.previewOnly && nextOrderId === orderId && !['auth', 'home', 'details', 'drivers', 'documents'].includes(next)) return;
     if (availablePreparationStep(next) !== next) { replace = true; returnTo = undefined; }
     next = availablePreparationStep(next);
     const required = nextOrderId === orderId ? requiredPreparationStep(next, locks.current) : null;
@@ -104,6 +108,7 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
     setStep(next); window.scrollTo(0, 0);
   }
   function persist(nextDraft: PreparationDraft, nextPhotos = state.current.photos) {
+    if (state.current.previewOnly) return Promise.reject(new Error('PREVIEW_READ_ONLY'));
     const record = { draft: nextDraft, photos: nextPhotos };
     state.current = record;
     setDraft(nextDraft); setWrites(count => count + 1);
@@ -140,6 +145,7 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
       state.current.photos.filter(photo => photo.driverId === primary.id)).catch(() => {});
   }
   async function completeStep(step: 'booking' | 'drivers') {
+    if (state.current.previewOnly) throw new Error('PREVIEW_READ_ONLY');
     setWrites(count => count + 1);
     const operation = queue.current.then(async () => {
       const record = { ...state.current, draft: prepareStepSubmission(state.current.draft, state.current.photos, step) };
@@ -153,6 +159,7 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
     finally { setWrites(count => count - 1); }
   }
   async function submit() {
+    if (state.current.previewOnly) throw new Error('PREVIEW_READ_ONLY');
     setWrites(count => count + 1);
     const operation = queue.current.then(async () => {
       const next = submitIdentityDraft(state.current.draft, state.current.photos, new Date().toISOString());
@@ -166,6 +173,7 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
     finally { setWrites(count => count - 1); }
   }
   async function reopen() {
+    if (state.current.previewOnly) throw new Error('PREVIEW_READ_ONLY');
     setWrites(count => count + 1);
     const operation = queue.current.catch(() => {}).then(async () => {
       if (identityDeadlinePassed(orderId)) throw new Error('IDENTITY_DEADLINE_PASSED');
@@ -186,18 +194,21 @@ export function usePreparation(setLanguage: (language: PreparationLanguage) => v
     else void load();
   }
   async function resetCurrentDemo() {
+    if (state.current.previewOnly) return;
     // Drain pending saves before replacing the record so none can restore it.
     const operation = queue.current.catch(() => {}).then(async () => {
       ++loadVersion.current;
       const record = await resetDemoPreparation(orderId);
       if (!record) return;
       state.current = record;
+      setPreviewOnly(false);
       applySavedLocks(record);
       setDraft(record.draft); setPhotos(record.photos); setError(null);
     });
     queue.current = operation;
     await operation;
   }
-  const visibleStep = !loading && !error && requiredPreparationStep(step, lockedSteps) ? 'home' : step;
-  return { identityExpired, step: visibleStep, blockedPrerequisite, dismissPrerequisite: () => setBlockedPrerequisite(null), draft, photos, lockedSteps, loading, error, saving: writes > 0, navigate, update, addPhotos, removePhoto, removeDriver, clearAdditionalDrivers, completeStep, submit, reopen, retry, resetCurrentDemo };
+  const visibleStep = previewOnly && !['auth', 'home', 'details', 'drivers', 'documents'].includes(step) ? 'home'
+    : !loading && !error && requiredPreparationStep(step, lockedSteps) ? 'home' : step;
+  return { identityExpired, previewOnly, step: visibleStep, blockedPrerequisite, dismissPrerequisite: () => setBlockedPrerequisite(null), draft, photos, lockedSteps, loading, error, saving: writes > 0, navigate, update, addPhotos, removePhoto, removeDriver, clearAdditionalDrivers, completeStep, submit, reopen, retry, resetCurrentDemo };
 }

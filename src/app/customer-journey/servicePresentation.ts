@@ -44,9 +44,10 @@ export function rentalServicesAvailable(orderId: string, file: { orderId: string
 export type PreparationRestrictedService = 'identity' | 'pickup' | 'selfservice' | 'renewal' | 'more';
 export function preparationServiceBlockReason(service: PreparationRestrictedService, state: {
   busy: boolean; identityClosed: boolean; identityReason?: PreparationKey; pickupReady: boolean; rentalActive: boolean;
-  pickupState: 'loading' | 'error' | 'empty' | 'ready'; rentalMode?: 'regular' | 'selfservice';
+  pickupState: 'loading' | 'error' | 'empty' | 'ready'; rentalMode?: 'regular' | 'selfservice'; previewOnly?: boolean;
 }): PreparationKey | undefined {
   if (state.busy) return 'prepServiceBusy';
+  if (state.previewOnly && service !== 'identity' && service !== 'more') return 'prepTemporaryPreview';
   if (service === 'identity') return state.identityClosed ? state.identityReason ?? 'prepIdentityExpired' : undefined;
   if (service === 'renewal') return state.rentalActive ? undefined : 'prepRenewalWaitingHint';
   if (service === 'more') return 'prepMoreAppsPlanned';

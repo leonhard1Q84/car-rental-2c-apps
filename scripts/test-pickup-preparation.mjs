@@ -62,8 +62,13 @@ try {
   const records = new Map();
   const originalIndexedDB = globalThis.indexedDB;
   let failWrite = false;
+  let failRead = false;
+  let failOpen = false;
+  let storageOpens = 0;
   globalThis.indexedDB = {
     open() {
+      storageOpens++;
+      if (failOpen) throw new DOMException('Storage denied', 'SecurityError');
       const request = {};
       request.result = {
         close() {},
@@ -71,13 +76,16 @@ try {
           const tx = { objectStore: () => ({
             get(key) {
               const read = {};
-              queueMicrotask(() => { read.result = structuredClone(records.get(key)); tx.oncomplete(); });
+              queueMicrotask(() => {
+                if (failRead) { tx.error = new DOMException('Read failed', 'UnknownError'); tx.onerror(); return; }
+                read.result = structuredClone(records.get(key)); tx.oncomplete();
+              });
               return read;
             },
             put(record, key) {
               const write = {};
               queueMicrotask(() => {
-                if (failWrite) { tx.error = new Error('STORAGE_FULL'); tx.onerror(); return; }
+                if (failWrite) { tx.error = new DOMException('STORAGE_FULL', 'QuotaExceededError'); tx.onerror(); return; }
                 records.set(key, structuredClone(record)); write.result = key; tx.oncomplete();
               });
               return write;
@@ -91,7 +99,56 @@ try {
     }
   };
   try {
-    const { loadPreparation, savePreparation } = await server.ssrLoadModule('/src/app/customer-journey/storage.ts');
+    const { loadPreparation, loadPreparationForView, savePreparation } = await server.ssrLoadModule('/src/app/customer-journey/storage.ts');
+    const idbAdapter = globalThis.indexedDB;
+    delete globalThis.indexedDB;
+    assert.equal((await loadPreparationForView('RC10003')).previewOnly, true, 'missing browser storage supports read-only preview');
+    globalThis.indexedDB = undefined;
+    assert.equal((await loadPreparationForView('RC10003')).previewOnly, true, 'disabled storage property also supports preview');
+    globalThis.indexedDB = idbAdapter;
+    failOpen = true;
+    const opensBeforeAuth = storageOpens;
+    const authView = await loadPreparationForView('RC10001', false);
+    assert.equal(storageOpens, opensBeforeAuth, 'verification never opens unrelated local storage');
+    assert.equal(authView.previewOnly, undefined);
+    const deniedPreview = await loadPreparationForView('RC10003');
+    assert.equal(deniedPreview.previewOnly, true);
+    assert.equal(deniedPreview.draft.orderId, 'RC10003');
+    assert.equal(deniedPreview.draft.documentReview.state, 'REJECTED');
+    assert.ok(deniedPreview.photos.length > 0);
+    await assert.rejects(loadPreparationForView('RC10004'), /Storage denied/, 'other orders cannot silently switch to sample progress');
+    failOpen = false;
+    failWrite = true;
+    assert.equal((await loadPreparationForView('RC10003')).previewOnly, true, 'initial demo write quota failure permits read-only preview');
+    assert.equal(records.has('RC10003'), false, 'preview does not claim to have saved the sample');
+    failWrite = false;
+    const persistentDemo = await loadPreparationForView('RC10003');
+    assert.equal(persistentDemo.previewOnly, undefined, 'retry exits temporary mode when persistence succeeds');
+    persistentDemo.draft.drivers[0].first = 'Existing customer';
+    await savePreparation(persistentDemo);
+    const existingRecord = structuredClone(records.get('RC10003'));
+    failRead = true;
+    assert.equal((await loadPreparationForView('RC10003')).previewOnly, true);
+    assert.deepEqual(records.get('RC10003'), existingRecord, 'failed read never replaces existing progress');
+    failRead = false;
+    const recovered = await loadPreparationForView('RC10003');
+    assert.equal(recovered.previewOnly, undefined);
+    assert.equal(recovered.draft.drivers[0].first, 'Existing customer', 'retry restores actual progress rather than sample data');
+    records.set('RC10003', { ...existingRecord, photos: [null] });
+    await assert.rejects(loadPreparationForView('RC10003'), /INVALID_DRAFT/, 'corrupt records remain errors');
+    records.delete('RC10003');
+    failOpen = true;
+    for (const apiKey of ['VITE_CUSTOMER_AUTH_API_BASE_URL', 'VITE_CUSTOMER_SELF_SERVICE_API_BASE_URL', 'VITE_RENTAL_EXTENSION_API_BASE_URL']) {
+      const configuredServer = await createServer({ appType: 'custom', logLevel: 'error',
+        define: { [`import.meta.env.${apiKey}`]: JSON.stringify('https://api.example.test') },
+        optimizeDeps: { noDiscovery: true, include: [], entries: [] },
+        server: { middlewareMode: true, hmr: false, ws: false } });
+      try {
+        const configured = await configuredServer.ssrLoadModule('/src/app/customer-journey/storage.ts');
+        await assert.rejects(configured.loadPreparationForView('RC10003'), /Storage denied/, `${apiKey} blocks temporary sample progress`);
+      } finally { await configuredServer.close(); }
+    }
+    failOpen = false;
     const { reopenPreparation } = await server.ssrLoadModule('/src/modules/online-checkin/review.ts');
     for (const [orderId, state] of [['RC10004', 'REJECTED'], ['RC10005', 'APPROVED']]) {
       assert.equal(findPreparationBooking(` ${orderId.toLowerCase()} `, ' 8888 ')?.orderId, orderId);

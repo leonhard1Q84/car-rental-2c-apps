@@ -16,7 +16,7 @@ import { showCustomerToast } from '../../design/ui';
 
 interface ServiceEntriesProps {
   draft: PreparationDraft; hasPreparation: boolean; onIdentity: () => void; onInspection: () => void; onNotices: () => void;
-  onPickup: () => void; onSelfservice?: () => void; onRenewal?: () => void; onContract?: () => void; phone: string; disabled?: boolean; renewalLoading?: boolean; pickupReady?: boolean; rentalActive?: boolean; rentalMode?: 'regular' | 'selfservice'; pickupState?: 'loading' | 'error' | 'empty' | 'ready'; onRetry?: () => void;
+  onPickup: () => void; onSelfservice?: () => void; onRenewal?: () => void; onContract?: () => void; phone: string; disabled?: boolean; previewOnly?: boolean; renewalLoading?: boolean; pickupReady?: boolean; rentalActive?: boolean; rentalMode?: 'regular' | 'selfservice'; pickupState?: 'loading' | 'error' | 'empty' | 'ready'; onRetry?: () => void;
 }
 
 interface ServiceTileProps {
@@ -47,14 +47,14 @@ export function PreparationServiceEntries(props: ServiceEntriesProps) {
   return <PreparationServiceEntriesContent {...props} pickupReady={inspection.state.status === 'ready'} pickupState={inspection.state.status} onRetry={inspection.retry} rentalActive={props.rentalActive ?? rentalServicesAvailable(props.draft.orderId, contract.file, contract.verified)} />;
 }
 
-export function PreparationServiceEntriesContent({ draft, hasPreparation, onIdentity, onPickup, onSelfservice, onRenewal, phone, disabled = false, renewalLoading = false, pickupReady = false, rentalActive = false, rentalMode = 'regular', pickupState = 'empty', onRetry }: ServiceEntriesProps) {
+export function PreparationServiceEntriesContent({ draft, hasPreparation, onIdentity, onPickup, onSelfservice, onRenewal, phone, disabled = false, previewOnly = false, renewalLoading = false, pickupReady = false, rentalActive = false, rentalMode = 'regular', pickupState = 'empty', onRetry }: ServiceEntriesProps) {
   const { t } = useContext(LanguageContext);
   const id = useId();
   const [opened, setOpened] = useState<{ orderId: string; service: PreparationRestrictedService } | null>(null);
   const expired = identityDeadlinePassed(draft.orderId) && !draft.submittedAt;
   const identityDemoClosed = !customerInspectionApiConfigured() && draft.orderId === 'RC10014' && !draft.submittedAt;
   const identityReason: PreparationKey = identityDemoClosed ? 'prepIdentityDemoClosed' : 'prepIdentityExpired';
-  const blockState = { busy: disabled, identityClosed: expired || identityDemoClosed, identityReason, pickupReady, rentalActive, pickupState, rentalMode };
+  const blockState = { previewOnly, busy: disabled, identityClosed: expired || identityDemoClosed, identityReason, pickupReady, rentalActive, pickupState, rentalMode };
   const blockReason = opened && opened.orderId === draft.orderId ? preparationServiceBlockReason(opened.service, blockState) : undefined;
   useEffect(() => { if (opened && !blockReason) setOpened(null); }, [blockReason, opened]);
   const dialogTitles: Record<PreparationRestrictedService, PreparationKey> = { identity: 'prepIdentityTileTitle', pickup: 'prepPickupTileTitle', selfservice: 'prepSelfserviceTitle', renewal: 'prepRenewal', more: 'prepMoreAppsTitle' };
@@ -84,9 +84,9 @@ export function PreparationServiceEntriesContent({ draft, hasPreparation, onIden
     <div className="rounded-customer-card border border-customer-border bg-customer-card p-3 shadow-customer-card">
       <div className="grid grid-cols-3 items-start gap-x-1.5 gap-y-3">
         {PREPARATION_ONLINE_IDENTITY_ENABLED && <ServiceTile service="identity" title={t('prepIdentityTileTitle')} icon={FileCheck2} disabled={identityDisabled} onClick={handleIdentityClick} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'identity' })} label={`${t('prepIdentityTileTitle')} · ${identityStatus} · ${identityAction}`} badge={identityBadge} />}
-        <ServiceTile service="pickup" title={t('prepPickupTileTitle')} icon={CarFront} disabled={disabled || rentalMode !== 'regular' || !pickupReady} onClick={onPickup} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'pickup' })} />
-        <ServiceTile service="selfservice" title={t('prepSelfserviceTitle')} icon={KeyRound} disabled={disabled || rentalMode !== 'selfservice'} onClick={onSelfservice} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'selfservice' })} />
-        <ServiceTile service="renewal" title={t('prepRenewal')} icon={CalendarPlus} disabled={disabled || !rentalActive} loading={renewalLoading} onClick={onRenewal} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'renewal' })} />
+        <ServiceTile service="pickup" title={t('prepPickupTileTitle')} icon={CarFront} disabled={disabled || previewOnly || rentalMode !== 'regular' || !pickupReady} onClick={onPickup} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'pickup' })} />
+        <ServiceTile service="selfservice" title={t('prepSelfserviceTitle')} icon={KeyRound} disabled={disabled || previewOnly || rentalMode !== 'selfservice'} onClick={onSelfservice} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'selfservice' })} />
+        <ServiceTile service="renewal" title={t('prepRenewal')} icon={CalendarPlus} disabled={disabled || previewOnly || !rentalActive} loading={renewalLoading} onClick={onRenewal} onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'renewal' })} />
         <ServiceTile service="feedback" title={t('prepFeedbackTitle')} icon={MessageSquare} disabled={disabled} href={CUSTOMER_FEEDBACK_URL} external label={t('prepFeedbackAction')} onUnavailable={() => undefined} />
         <ServiceTile service="more" title={t('prepMoreAppsTitle')} icon={Grid2X2} disabled onUnavailable={() => setOpened({ orderId: draft.orderId, service: 'more' })} />
       </div>
