@@ -25,7 +25,10 @@ function makeOrder(orderId: string): LookupResult['order'] {
     return_branch_id: 'tokyo-narita', return_branch_name: 'Narita Airport Branch', branch_timezone: booking.timezone,
     booked_model_id: 'toyota-yaris', booked_model_name: 'Toyota Yaris', actual_vehicle_id: `vehicle-${orderId}`,
     actual_plate: vehicle.plate, actual_model_id: 'toyota-harrier', actual_model_name: vehicle.model, currency: 'JPY',
-    daily_base_rate: 12000, insurance: { code: 'STANDARD', name: 'Standard coverage', daily_rate: 1000, can_extend: true, provider: 'IX' },
+    daily_base_rate: 12000,
+    insurance: ['RC10006', 'RC10007'].includes(orderId)
+      ? { code: 'PLATFORM_OTA', name: '平台安心保障 (OTA Coverage)', daily_rate: 0, can_extend: false, provider: 'PLATFORM' }
+      : { code: 'STANDARD', name: 'Standard coverage', daily_rate: 1000, can_extend: true, provider: 'IX' },
     addons: [{ code: 'ETC', name: 'ETC card', charge_type: 'DAILY', unit_price: 100, quantity: 1 }],
     deposit_status: 'AUTHORIZED', atp_status: 'UNAVAILABLE',
     conflict_status: ['review-pending', 'review-accepted', 'review-rejected'].includes(localRenewalDemoScenario(orderId) || '') ? 'HARD_CONFLICT' : 'NONE',

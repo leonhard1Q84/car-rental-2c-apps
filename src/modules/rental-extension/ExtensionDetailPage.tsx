@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowRight,
   ShieldCheck,
   ChevronDown,
@@ -14,6 +15,7 @@ import type { SanitizedOrder } from './contracts';
 import type { Quote } from './api';
 import { RentalVehicleCard } from './RentalVehicleCard';
 import { ExpectedReturnDateTimePicker } from './ExpectedReturnDateTimePicker';
+import { CoverageDetailsDrawer } from './CoverageDetailsDrawer';
 
 export interface ExtensionDetailPageProps {
   order: SanitizedOrder;
@@ -43,28 +45,22 @@ export const ExtensionDetailPage: React.FC<ExtensionDetailPageProps> = ({
   const { lang, t } = useContext(LanguageContext);
   const [isPriceDetailOpen, setIsPriceDetailOpen] = useState(true);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isCoverageDrawerOpen, setIsCoverageDrawerOpen] = useState(false);
+  const [hasConsentedCoverage, setHasConsentedCoverage] = useState(false);
+  const [consentError, setConsentError] = useState<PreparationKey | null>(null);
 
   const formatDateTime = (value: string) => {
     try {
       const dateObj = new Date(value);
       if (Number.isNaN(dateObj.getTime())) return value;
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: order.branch_timezone || 'Asia/Tokyo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).formatToParts(dateObj);
-      const get = (type: string) => parts.find((p) => p.type === type)?.value;
-      const y = get('year');
-      const m = get('month');
-      const d = get('day');
-      const hr = get('hour');
-      const min = get('minute');
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const y = dateObj.getFullYear();
+      const m = pad(dateObj.getMonth() + 1);
+      const d = pad(dateObj.getDate());
+      const hr = pad(dateObj.getHours());
+      const min = pad(dateObj.getMinutes());
       if (lang.startsWith('zh')) {
-        return `${y}年${Number(m)}月${Number(d)}日 ${hr}:${min}`;
+        return `${y}年${m}月${d}日 ${hr}:${min}`;
       }
       return `${y}-${m}-${d} ${hr}:${min}`;
     } catch {
@@ -83,10 +79,29 @@ export const ExtensionDetailPage: React.FC<ExtensionDetailPageProps> = ({
   const p = quote.pricing;
   const insurance = order.insurance;
   const addons = quote.addon_details ?? order.addons ?? [];
-  const isOtaInsuranceCannotExtend = !insurance?.can_extend;
+
+  const isPlatformInsurance = Boolean(
+    !insurance ||
+    !insurance.can_extend ||
+    ['OTA', 'PLATFORM'].includes((insurance.provider || '').toUpperCase()) ||
+    (insurance.provider || '').toUpperCase().includes('PLATFORM') ||
+    (insurance.provider || '').toUpperCase().includes('OTA') ||
+    (insurance.code || '').toUpperCase().includes('PLATFORM') ||
+    (insurance.code || '').toUpperCase().includes('OTA') ||
+    (insurance.name || '').toLowerCase().includes('平台') ||
+    (insurance.name || '').toLowerCase().includes('platform') ||
+    (insurance.name || '').toLowerCase().includes('ota')
+  );
+
+  const displayInsuranceDailyRate = isPlatformInsurance
+    ? (extensionDays > 0 && p.insurance_amount > 0 ? Math.round(p.insurance_amount / extensionDays) : (insurance?.daily_rate || 1000))
+    : (insurance?.daily_rate ?? 1000);
+  const displayInsuranceName = isPlatformInsurance
+    ? (t('renewCoverageDrawerTitle') || 'Standard coverage')
+    : (insurance?.name || 'Standard CDW');
 
   return (
-    <div className="space-y-3.5 pb-28">
+    <div className="space-y-3.5 pb-36">
       {error && (
         <div role="alert" className="rounded-customer-inset border border-customer-danger-border bg-customer-danger-subtle p-3 text-customer-caption text-customer-danger-text">
           {t(error)}
@@ -167,11 +182,11 @@ export const ExtensionDetailPage: React.FC<ExtensionDetailPageProps> = ({
               </div>
               <div>
                 <h3 className="text-customer-caption font-bold text-customer-text">
-                  {insurance?.name || 'Standard CDW'}
+                  {displayInsuranceName}
                 </h3>
                 <p className="text-customer-caption text-customer-text-tertiary mt-0.5">
                   {t('renewDailyRate')}
-                  {formatMoney(insurance?.daily_rate ?? 2000, p.currency)}
+                  {formatMoney(displayInsuranceDailyRate, p.currency)}
                   {t('renewPerDay')}
                 </p>
               </div>
@@ -182,9 +197,19 @@ export const ExtensionDetailPage: React.FC<ExtensionDetailPageProps> = ({
           </div>
         </div>
 
-        {isOtaInsuranceCannotExtend && (
-          <div className="p-3 bg-customer-warning-subtle border border-customer-warning-border rounded-customer-inset text-customer-caption text-customer-warning-text leading-relaxed">
-            {t('renewCoverageUnavailable')}
+        {isPlatformInsurance && (
+          <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-customer-inset flex items-center justify-between gap-2 text-xs text-amber-900">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertTriangle className="size-3.5 shrink-0 text-amber-600" />
+              <span className="truncate">{t('renewCoverageCardNotice')}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsCoverageDrawerOpen(true)}
+              className="text-xs font-semibold text-customer-brand-text hover:underline shrink-0 cursor-pointer"
+            >
+              {t('renewCoverageViewDetails')} &gt;
+            </button>
           </div>
         )}
       </section>
@@ -262,7 +287,7 @@ export const ExtensionDetailPage: React.FC<ExtensionDetailPageProps> = ({
               <div className="pl-2 space-y-0.5 text-customer-caption text-customer-text-tertiary">
                 <div className="flex justify-between">
                   <span>
-                    {insurance?.name || 'Standard CDW'} ({formatMoney(insurance?.daily_rate ?? 2000, p.currency)} × {extensionDays} {t('renewDays')})
+                    {displayInsuranceName} ({formatMoney(displayInsuranceDailyRate, p.currency)} × {extensionDays} {t('renewDays')})
                   </span>
                   <span className="font-mono">{formatMoney(p.insurance_amount, p.currency)}</span>
                 </div>
@@ -305,34 +330,78 @@ export const ExtensionDetailPage: React.FC<ExtensionDetailPageProps> = ({
         style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
         className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-customer-border p-3 sm:p-4 z-40"
       >
-        <div className="max-w-customer-content mx-auto flex items-center justify-between gap-4">
-          <div>
-            <p className="text-customer-caption text-customer-text-tertiary">{t('renewTotal')}</p>
-            <p className="text-customer-title font-black text-customer-text font-mono">
-              {formatMoney(p.grand_total, p.currency)}
-            </p>
-          </div>
+        <div className="max-w-customer-content mx-auto space-y-2.5">
+          {isPlatformInsurance && (
+            <div className="space-y-1">
+              <div className="flex items-start gap-2 pt-0.5">
+                <input
+                  id="coverage-consent-checkbox"
+                  type="checkbox"
+                  checked={hasConsentedCoverage}
+                  onChange={(e) => {
+                    setHasConsentedCoverage(e.target.checked);
+                    if (consentError) setConsentError(null);
+                  }}
+                  className="mt-0.5 size-4 rounded border-customer-border text-customer-brand focus:ring-customer-brand cursor-pointer"
+                />
+                <label
+                  htmlFor="coverage-consent-checkbox"
+                  className="text-xs text-customer-text-secondary leading-snug cursor-pointer select-none"
+                >
+                  {t('renewCoverageConsentCheckbox')}
+                </label>
+              </div>
+              {consentError && (
+                <p className="text-[11px] text-customer-danger-text font-medium pl-6">
+                  {t(consentError)}
+                </p>
+              )}
+            </div>
+          )}
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onConfirmApply}
-            className="flex-1 max-w-xs h-11 px-6 rounded-customer-inset bg-customer-brand hover:bg-customer-brand-subtle active:bg-customer-brand-subtle text-white text-customer-caption font-bold flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-          >
-            {busy ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                <span>{t('prepSaving')}</span>
-              </>
-            ) : (
-              <>
-                <span>{t('renewConfirmApply')}</span>
-                <ArrowRight className="size-4" />
-              </>
-            )}
-          </button>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-customer-caption text-customer-text-tertiary">{t('renewTotal')}</p>
+              <p className="text-customer-title font-black text-customer-text font-mono">
+                {formatMoney(p.grand_total, p.currency)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              disabled={busy || (isPlatformInsurance && !hasConsentedCoverage)}
+              onClick={() => {
+                if (isPlatformInsurance && !hasConsentedCoverage) {
+                  setConsentError('renewCoverageConsentRequired');
+                  return;
+                }
+                onConfirmApply();
+              }}
+              className="flex-1 max-w-xs h-11 px-6 rounded-customer-inset bg-customer-brand hover:bg-customer-brand-subtle active:bg-customer-brand-subtle text-white text-customer-caption font-bold flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>{t('prepSaving')}</span>
+                </>
+              ) : (
+                <>
+                  <span>{t('renewConfirmApply')}</span>
+                  <ArrowRight className="size-4" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </footer>
+
+      <CoverageDetailsDrawer
+        open={isCoverageDrawerOpen}
+        onClose={() => setIsCoverageDrawerOpen(false)}
+        brandName={order.brand_name || 'IX RENTAL'}
+        dailyRate={displayInsuranceDailyRate}
+        currency={p.currency}
+      />
     </div>
   );
 };
